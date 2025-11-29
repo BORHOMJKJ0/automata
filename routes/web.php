@@ -1,7 +1,7 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DropboxController;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,9 +17,15 @@ use App\Http\Controllers\DropboxController;
 Route::get('/', function () {
     return view('welcome');
 });
-
 Route::get('/', [DropboxController::class, 'index'])->name('dropbox.index');
-Route::post('/browse', [DropboxController::class, 'browse'])->name('dropbox.browse');
-Route::post('/browse/folder', [DropboxController::class, 'browseFolder'])->name('dropbox.folder');
-Route::post('/download', [DropboxController::class, 'download'])->name('dropbox.download');
-Route::post('/preview', [DropboxController::class, 'preview'])->name('dropbox.preview');
+
+// OAuth Authentication
+Route::get('/connect', [DropboxController::class, 'connect'])->name('dropbox.connect');
+Route::get('/dropbox/callback', [DropboxController::class, 'callback'])->name('dropbox.callback');
+Route::get('/logout', [DropboxController::class, 'logout'])->name('dropbox.logout');
+
+// Shared Links Routes
+Route::match(['get', 'post'], '/browse-shared', [DropboxController::class, 'browseSharedLink'])->name('dropbox.browse.shared');
+Route::get('/browse-shared-folder', [DropboxController::class, 'browseSharedSubfolder'])->name('dropbox.browse.shared.folder');
+Route::post('/shared/download', [DropboxController::class, 'downloadSharedFile'])->name('dropbox.shared.download');
+Route::get('/shared/preview', [DropboxController::class, 'previewFile'])->name('dropbox.shared.preview');

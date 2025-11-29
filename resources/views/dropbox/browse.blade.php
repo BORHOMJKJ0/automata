@@ -1,152 +1,295 @@
-{{-- resources/views/dropbox/browse.blade.php --}}
-<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تصفح الملفات</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .folder-item:hover, .file-item:hover {
-            background-color: #f8f9fa;
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body class="bg-light">
-    <div class="container mt-4">
-        @if(session('error'))
-            <div class="alert alert-danger alert-dismissible fade show">
-                {{ session('error') }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        @endif
+@extends('dropbox.layout')
 
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <div>
-                    <h4 class="mb-1">📁 محتوى المجلد</h4>
-                    @if($currentPath)
-                        <small>المسار: {{ $currentPath }}</small>
-                    @else
-                        <small>الجذر</small>
-                    @endif
-                </div>
-                <a href="{{ route('dropbox.index') }}" class="btn btn-light btn-sm">
-                    🏠 رابط جديد
+@section('title', 'تصفح الملفات')
+
+@push('styles')
+<style>
+    .breadcrumb-custom {
+        background: white;
+        padding: 1rem 1.5rem;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .breadcrumb-custom .breadcrumb {
+        margin: 0;
+    }
+
+    .folder-item {
+        background: white;
+        border: none;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+        align-items: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .folder-item:hover {
+        transform: translateX(-8px);
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+        background: linear-gradient(135deg, #f8f9ff 0%, #fff 100%);
+    }
+
+    .folder-icon {
+        font-size: 2.5rem;
+        margin-left: 1rem;
+    }
+
+    .file-table {
+        background: white;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .file-row {
+        transition: all 0.2s ease;
+    }
+
+    .file-row:hover {
+        background-color: #f8f9ff;
+    }
+
+    .section-header {
+        background: linear-gradient(135deg, #f8f9ff 0%, #fff 100%);
+        padding: 1rem 1.5rem;
+        border-bottom: 2px solid #e0e0e0;
+        font-weight: 600;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    .empty-icon {
+        font-size: 5rem;
+        opacity: 0.3;
+        margin-bottom: 1rem;
+    }
+
+    .badge-count {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.875rem;
+    }
+
+    .btn-action {
+        padding: 0.375rem 0.75rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-2px);
+    }
+</style>
+@endpush
+
+@section('content')
+{{-- Breadcrumb --}}
+<div class="breadcrumb-custom mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item">
+                <a href="{{ route('dropbox.index') }}">
+                    <i class="bi bi-house"></i> الرئيسية
                 </a>
-            </div>
+            </li>
+            @if($currentPath)
+                @php
+                    $pathParts = array_filter(explode('/', trim($currentPath, '/')));
+                    $buildPath = '';
+                @endphp
+                @foreach($pathParts as $index => $part)
+                    @php $buildPath .= '/' . $part; @endphp
+                    @if($index === count($pathParts) - 1)
+                        <li class="breadcrumb-item active">
+                            <i class="bi bi-folder"></i> {{ $part }}
+                        </li>
+                    @else
+                        <li class="breadcrumb-item">
+                            <a href="{{ route('dropbox.browse.shared.folder') }}?shared_url={{ urlencode($sharedUrl) }}&path={{ urlencode($buildPath) }}">
+                                <i class="bi bi-folder"></i> {{ $part }}
+                            </a>
+                        </li>
+                    @endif
+                @endforeach
+            @else
+                <li class="breadcrumb-item active">
+                    <i class="bi bi-folder"></i> الجذر
+                </li>
+            @endif
+        </ol>
+    </nav>
+</div>
 
-            <div class="card-body p-0">
-                {{-- المجلدات --}}
-                @if(count($items['folders']) > 0)
-                    <div class="p-3 bg-light border-bottom">
-                        <h6 class="mb-0">📂 المجلدات ({{ count($items['folders']) }})</h6>
-                    </div>
-                    <div class="list-group list-group-flush">
-                        @foreach($items['folders'] as $folder)
-                            <form method="POST" action="{{ route('dropbox.folder') }}" class="m-0">
-                                @csrf
-                                <input type="hidden" name="shared_url" value="{{ $sharedUrl }}">
-                                <input type="hidden" name="path" value="{{ $folder['path'] }}">
-                                <button type="submit" class="list-group-item list-group-item-action folder-item border-0 d-flex align-items-center">
-                                    <span class="fs-4 me-2">📁</span>
-                                    <span class="fw-bold">{{ $folder['name'] }}</span>
-                                </button>
-                            </form>
-                        @endforeach
-                    </div>
-                @endif
-
-                {{-- الملفات --}}
-                @if(count($items['files']) > 0)
-                    <div class="p-3 bg-light border-bottom">
-                        <h6 class="mb-0">📄 الملفات ({{ count($items['files']) }})</h6>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>الاسم</th>
-                                    <th>الحجم</th>
-                                    <th>آخر تعديل</th>
-                                    <th>العمليات</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($items['files'] as $file)
-                                    <tr>
-                                        <td class="file-item">
-                                            @php
-                                                $icon = match($file['extension']) {
-                                                    'pdf' => '📕',
-                                                    'doc', 'docx' => '📘',
-                                                    'xls', 'xlsx' => '📗',
-                                                    'jpg', 'jpeg', 'png', 'gif' => '🖼️',
-                                                    'zip', 'rar' => '📦',
-                                                    'mp4', 'avi' => '🎬',
-                                                    'mp3', 'wav' => '🎵',
-                                                    default => '📄'
-                                                };
-                                            @endphp
-                                            <span class="me-2">{{ $icon }}</span>
-                                            <span>{{ $file['name'] }}</span>
-                                        </td>
-                                        <td>
-                                            @if($file['size'] < 1024)
-                                                {{ $file['size'] }} B
-                                            @elseif($file['size'] < 1048576)
-                                                {{ number_format($file['size'] / 1024, 2) }} KB
-                                            @else
-                                                {{ number_format($file['size'] / 1048576, 2) }} MB
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if($file['modified'])
-                                                {{ date('Y-m-d H:i', strtotime($file['modified'])) }}
-                                            @else
-                                                -
-                                            @endif
-                                        </td>
-                                        <td>
-                                            <div class="btn-group btn-group-sm">
-                                                @if($file['is_previewable'])
-                                                    <form method="POST" action="{{ route('dropbox.preview') }}" target="_blank" class="d-inline">
-                                                        @csrf
-                                                        <input type="hidden" name="shared_url" value="{{ $sharedUrl }}">
-                                                        <input type="hidden" name="path" value="{{ $file['path'] }}">
-                                                        <button type="submit" class="btn btn-info">
-                                                            👁️ معاينة
-                                                        </button>
-                                                    </form>
-                                                @endif
-                                                <form method="POST" action="{{ route('dropbox.download') }}" class="d-inline">
-                                                    @csrf
-                                                    <input type="hidden" name="shared_url" value="{{ $sharedUrl }}">
-                                                    <input type="hidden" name="path" value="{{ $file['path'] }}">
-                                                    <button type="submit" class="btn btn-primary">
-                                                        ⬇️ تحميل
-                                                    </button>
-                                                </form>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                @endif
-
-                @if(count($items['folders']) === 0 && count($items['files']) === 0)
-                    <div class="p-5 text-center text-muted">
-                        <div class="fs-1 mb-3">📭</div>
-                        <p class="mb-0">المجلد فارغ</p>
-                    </div>
-                @endif
-            </div>
+{{-- Content --}}
+<div class="card-custom">
+    <div class="card-header-custom">
+        <div class="d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">
+                <i class="bi bi-folder2-open me-2"></i>
+                محتوى المجلد
+            </h4>
+            <a href="{{ route('dropbox.index') }}" class="btn btn-light btn-sm">
+                <i class="bi bi-arrow-return-right"></i> رجوع
+            </a>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    <div class="card-body p-0">
+        {{-- Folders --}}
+        @if(count($items['folders']) > 0)
+            <div class="section-header">
+                <i class="bi bi-folder-fill me-2"></i>
+                المجلدات
+                <span class="badge-count">{{ count($items['folders']) }}</span>
+            </div>
+            <div class="p-3">
+                @foreach($items['folders'] as $folder)
+                    <a href="{{ route('dropbox.browse.shared.folder') }}?shared_url={{ urlencode($sharedUrl) }}&path={{ urlencode($folder['path']) }}"
+                       class="folder-item">
+                        <span class="folder-icon">📁</span>
+                        <span class="fw-bold">{{ $folder['name'] }}</span>
+                    </a>
+                @endforeach
+            </div>
+        @endif
+
+        {{-- Files --}}
+        @if(count($items['files']) > 0)
+            <div class="section-header">
+                <i class="bi bi-file-earmark me-2"></i>
+                الملفات
+                <span class="badge-count">{{ count($items['files']) }}</span>
+            </div>
+            <div class="file-table">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 45%;">
+                                    <i class="bi bi-file-text me-2"></i>الاسم
+                                </th>
+                                <th style="width: 15%;">
+                                    <i class="bi bi-hdd me-2"></i>الحجم
+                                </th>
+                                <th style="width: 20%;">
+                                    <i class="bi bi-clock me-2"></i>التعديل
+                                </th>
+                                <th style="width: 20%;" class="text-center">
+                                    <i class="bi bi-gear me-2"></i>العمليات
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($items['files'] as $file)
+                                <tr class="file-row">
+                                    <td>
+                                        @php
+                                            $icons = [
+                                                'pdf' => ['icon' => '📕', 'color' => '#dc3545'],
+                                                'doc' => ['icon' => '📘', 'color' => '#0d6efd'],
+                                                'docx' => ['icon' => '📘', 'color' => '#0d6efd'],
+                                                'xls' => ['icon' => '📗', 'color' => '#198754'],
+                                                'xlsx' => ['icon' => '📗', 'color' => '#198754'],
+                                                'ppt' => ['icon' => '📙', 'color' => '#fd7e14'],
+                                                'pptx' => ['icon' => '📙', 'color' => '#fd7e14'],
+                                                'txt' => ['icon' => '📝', 'color' => '#6c757d'],
+                                                'md' => ['icon' => '📝', 'color' => '#6c757d'],
+                                                'jpg' => ['icon' => '🖼️', 'color' => '#0dcaf0'],
+                                                'jpeg' => ['icon' => '🖼️', 'color' => '#0dcaf0'],
+                                                'png' => ['icon' => '🖼️', 'color' => '#0dcaf0'],
+                                                'gif' => ['icon' => '🖼️', 'color' => '#0dcaf0'],
+                                                'zip' => ['icon' => '📦', 'color' => '#ffc107'],
+                                                'rar' => ['icon' => '📦', 'color' => '#ffc107'],
+                                                'mp4' => ['icon' => '🎬', 'color' => '#d63384'],
+                                                'avi' => ['icon' => '🎬', 'color' => '#d63384'],
+                                                'mp3' => ['icon' => '🎵', 'color' => '#20c997'],
+                                                'wav' => ['icon' => '🎵', 'color' => '#20c997'],
+                                                'html' => ['icon' => '💻', 'color' => '#fd7e14'],
+                                                'css' => ['icon' => '💻', 'color' => '#0d6efd'],
+                                                'js' => ['icon' => '💻', 'color' => '#ffc107'],
+                                                'php' => ['icon' => '⚙️', 'color' => '#6f42c1'],
+                                                'py' => ['icon' => '⚙️', 'color' => '#0d6efd'],
+                                                'java' => ['icon' => '⚙️', 'color' => '#dc3545'],
+                                            ];
+
+                                            $fileIcon = $icons[$file['extension']] ?? ['icon' => '📄', 'color' => '#6c757d'];
+                                        @endphp
+                                        <span class="me-2 fs-4">{{ $fileIcon['icon'] }}</span>
+                                        <span>{{ $file['name'] }}</span>
+                                    </td>
+                                    <td>
+                                        @if($file['size'] < 1024)
+                                            <span class="badge bg-secondary">{{ $file['size'] }} B</span>
+                                        @elseif($file['size'] < 1048576)
+                                            <span class="badge bg-info">{{ number_format($file['size'] / 1024, 2) }} KB</span>
+                                        @else
+                                            <span class="badge bg-primary">{{ number_format($file['size'] / 1048576, 2) }} MB</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if($file['modified'])
+                                            <div>{{ date('Y-m-d', strtotime($file['modified'])) }}</div>
+                                            <small class="text-muted">{{ date('H:i', strtotime($file['modified'])) }}</small>
+                                        @else
+                                            <span class="text-muted">-</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm">
+                                            @if($file['is_previewable'])
+                                                <a href="{{ route('dropbox.shared.preview') }}?shared_url={{ urlencode($sharedUrl) }}&path={{ urlencode($file['path']) }}"
+                                                   class="btn btn-outline-info btn-action"
+                                                   title="معاينة">
+                                                    <i class="bi bi-eye"></i>
+                                                </a>
+                                            @endif
+                                            <form method="POST" action="{{ route('dropbox.shared.download') }}" class="d-inline">
+                                                @csrf
+                                                <input type="hidden" name="shared_url" value="{{ $sharedUrl }}">
+                                                <input type="hidden" name="path" value="{{ $file['path'] }}">
+                                                <button type="submit" class="btn btn-outline-success btn-action" title="تحميل">
+                                                    <i class="bi bi-download"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endif
+
+        {{-- Empty State --}}
+        @if(count($items['folders']) === 0 && count($items['files']) === 0)
+            <div class="empty-state">
+                <div class="empty-icon">📭</div>
+                <h5 class="text-muted">المجلد فارغ</h5>
+                <p class="text-muted mb-0">لا يوجد ملفات أو مجلدات في هذا الموقع</p>
+            </div>
+        @endif
+    </div>
+
+    {{-- Footer --}}
+    <div class="card-footer bg-light text-center">
+        <small class="text-muted">
+            <i class="bi bi-folder me-2"></i>{{ count($items['folders']) }} مجلد
+            <span class="mx-2">•</span>
+            <i class="bi bi-file-earmark me-2"></i>{{ count($items['files']) }} ملف
+        </small>
+    </div>
+</div>
+@endsection

@@ -43,10 +43,10 @@ return [
             'visibility' => 'public',
             'throw' => false,
         ],
-'dropbox' => [
-    'driver' => 'dropbox',
-    'authorization_token' => env('DROPBOX_ACCESS_TOKEN'),
-],
+        'dropbox' => [
+            'driver' => 'dropbox',
+            'authorization_token' => env('DROPBOX_ACCESS_TOKEN'),
+        ],
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

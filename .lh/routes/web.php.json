@@ -1,0 +1,26 @@
+{
+    "sourceFile": "routes/web.php",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 2,
+            "patches": [
+                {
+                    "date": 1764385660347,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1764385856868,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -17,7 +17,8 @@\n Route::get('/', function () {\n     return view('welcome');\n });\n \n-Route::get('/dropbox', [DropboxController::class, 'index'])->name('dropbox.index');\n-Route::get('/dropbox/browse/{path?}', [DropboxController::class, 'browse'])->name('dropbox.browse');\n-Route::get('/dropbox/download/{path}', [DropboxController::class, 'download'])->name('dropbox.download');\n\\ No newline at end of file\n+Route::get('/', [DropboxController::class, 'index'])->name('dropbox.index');\n+Route::post('/browse', [DropboxController::class, 'browse'])->name('dropbox.browse');\n+Route::post('/browse/subfolder', [DropboxController::class, 'browseSubfolder'])->name('dropbox.subfolder');\n+Route::post('/download', [DropboxController::class, 'downloadFile'])->name('dropbox.download');\n\\ No newline at end of file\n"
+                },
+                {
+                    "date": 1764386290221,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -19,6 +19,7 @@\n });\n \n Route::get('/', [DropboxController::class, 'index'])->name('dropbox.index');\n Route::post('/browse', [DropboxController::class, 'browse'])->name('dropbox.browse');\n-Route::post('/browse/subfolder', [DropboxController::class, 'browseSubfolder'])->name('dropbox.subfolder');\n-Route::post('/download', [DropboxController::class, 'downloadFile'])->name('dropbox.download');\n\\ No newline at end of file\n+Route::post('/browse/folder', [DropboxController::class, 'browseFolder'])->name('dropbox.folder');\n+Route::post('/download', [DropboxController::class, 'download'])->name('dropbox.download');\n+Route::post('/preview', [DropboxController::class, 'preview'])->name('dropbox.preview');\n\\ No newline at end of file\n"
+                }
+            ],
+            "date": 1764385660347,
+            "name": "Commit-0",
+            "content": "<?php\n\nuse Illuuse App\\Http\\Controllers\\DropboxController;\nminate\\Support\\Facades\\Route;\n\n/*\n|--------------------------------------------------------------------------\n| Web Routes\n|--------------------------------------------------------------------------\n|\n| Here is where you can register web routes for your application. These\n| routes are loaded by the RouteServiceProvider and all of them will\n| be assigned to the \"web\" middleware group. Make something great!\n|\n*/\n\nRoute::get('/', function () {\n    return view('welcome');\n});\n\nRoute::get('/dropbox', [DropboxController::class, 'index'])->name('dropbox.index');\nRoute::get('/dropbox/browse/{path?}', [DropboxController::class, 'browse'])->name('dropbox.browse');\nRoute::get('/dropbox/download/{path}', [DropboxController::class, 'download'])->name('dropbox.download');\n```\n"
+        }
+    ]
+}

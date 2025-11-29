@@ -1,0 +1,22 @@
+{
+    "sourceFile": "app/Providers/DropboxServiceProvider.php",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1764385794346,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1764385801677,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -13,5 +13,8 @@\n     public function boot()\n     {\n         Storage::extend('dropbox', function ($app, $config) {\n             $client = new DropboxClient($config['authorization_token']);\n-            return new Filesystem(new Dropb\n\\ No newline at end of file\n+            return new Filesystem(new DropboxAdapter($client));\n+        });\n+    }\n+}\n\\ No newline at end of file\n"
+                }
+            ],
+            "date": 1764385794345,
+            "name": "Commit-0",
+            "content": "<?php\n\nnamespace App\\Providers;\n\nuse Illuminate\\Support\\ServiceProvider;\nuse League\\Flysystem\\Filesystem;\nuse Spatie\\Dropbox\\Client as DropboxClient;\nuse Spatie\\FlysystemDropbox\\DropboxAdapter;\n\nclass DropboxServiceProvider extends ServiceProvider\n{\n    public function boot()\n    {\n        Storage::extend('dropbox', function ($app, $config) {\n            $client = new DropboxClient($config['authorization_token']);\n            return new Filesystem(new DropboxAdapter($client));\n        });\n    }\n}"
+        }
+    ]
+}

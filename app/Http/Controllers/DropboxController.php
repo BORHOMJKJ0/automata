@@ -19,8 +19,6 @@ class DropboxController extends Controller
         $this->clientId = env('DROPBOX_CLIENT_ID');
         $this->clientSecret = env('DROPBOX_CLIENT_SECRET');
         $this->redirectUri = env('DROPBOX_REDIRECT_URI', url('/dropbox/callback'));
-
-        // السماح بالوصول للصفحات العامة بدون middleware
         $this->middleware('web');
     }
 
@@ -60,7 +58,6 @@ class DropboxController extends Controller
         }
 
         try {
-            // تبادل الكود بـ Access Token
             $response = Http::asForm()->post('https://api.dropboxapi.com/oauth2/token', [
                 'code' => $code,
                 'grant_type' => 'authorization_code',
@@ -75,8 +72,6 @@ class DropboxController extends Controller
             }
 
             $data = $response->json();
-
-            // حفظ Access Token في الجلسة
             Session::put('dropbox_access_token', $data['access_token']);
             Session::put('dropbox_account_id', $data['account_id']);
 
@@ -112,14 +107,10 @@ class DropboxController extends Controller
             'shared_url' => 'required|url',
         ]);
 
-        // تنظيف الرابط
         $sharedUrl = str_replace('dl=0', 'dl=1', $sharedUrl);
-
-        // حفظ الرابط في الجلسة
         Session::put('current_shared_url', $sharedUrl);
 
         try {
-            // استخدام get_shared_link_metadata للحصول على معلومات الرابط
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer '.$accessToken,
                 'Content-Type' => 'application/json',
@@ -130,7 +121,6 @@ class DropboxController extends Controller
             if ($response->failed()) {
                 $errorData = $response->json();
                 $errorMsg = $errorData['error_summary'] ?? 'فشل قراءة الرابط المشارك';
-
                 \Log::error('Shared Link Metadata Error: '.$errorMsg);
 
                 return redirect()->route('dropbox.index')
@@ -139,13 +129,11 @@ class DropboxController extends Controller
 
             $metadata = $response->json();
 
-            // التحقق من نوع الرابط
             if ($metadata['.tag'] !== 'folder') {
                 return redirect()->route('dropbox.index')
                     ->with('error', 'الرابط يجب أن يكون لمجلد وليس لملف');
             }
 
-            // الآن نستخدم list_folder مع الرابط المشارك
             $listResponse = Http::withHeaders([
                 'Authorization' => 'Bearer '.$accessToken,
                 'Content-Type' => 'application/json',
@@ -159,7 +147,6 @@ class DropboxController extends Controller
             if ($listResponse->failed()) {
                 $errorData = $listResponse->json();
                 $errorMsg = $errorData['error_summary'] ?? 'فشل قراءة محتوى المجلد';
-
                 \Log::error('List Folder Error: '.$errorMsg);
 
                 return redirect()->route('dropbox.index')
@@ -167,6 +154,15 @@ class DropboxController extends Controller
             }
 
             $data = $listResponse->json();
+
+            // التحقق من وجود entries
+            if (! isset($data['entries']) || ! is_array($data['entries'])) {
+                \Log::error('Invalid response format: '.json_encode($data));
+
+                return redirect()->route('dropbox.index')
+                    ->with('error', 'تنسيق استجابة غير صالح من Dropbox');
+            }
+
             $items = $this->organizeItems($data['entries']);
 
             return view('dropbox.browse', [
@@ -201,9 +197,6 @@ class DropboxController extends Controller
 
         $path = $request->query('path') ?? $request->input('path', '');
 
-        \Log::info('Browse Subfolder - Shared URL: '.$sharedUrl);
-        \Log::info('Browse Subfolder - Path: '.$path);
-
         if (! $sharedUrl) {
             return redirect()->route('dropbox.index')
                 ->with('error', 'رابط مشارك مطلوب');
@@ -213,12 +206,11 @@ class DropboxController extends Controller
         Session::put('current_shared_url', $sharedUrl);
 
         try {
-            // نستخدم list_folder مع المسار النسبي من الرابط المشارك
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer '.$accessToken,
                 'Content-Type' => 'application/json',
             ])->post('https://api.dropboxapi.com/2/files/list_folder', [
-                'path' => $path, // المسار الكامل من الـ entry
+                'path' => $path,
                 'shared_link' => [
                     'url' => $sharedUrl,
                 ],
@@ -227,14 +219,20 @@ class DropboxController extends Controller
             if ($response->failed()) {
                 $errorData = $response->json();
                 $errorMsg = $errorData['error_summary'] ?? 'فشل قراءة المجلد';
-
                 \Log::error('Browse Subfolder Error: '.$errorMsg);
-                \Log::error('Full Response: '.$response->body());
 
-                return back()->with('error', 'لا يمكن فتح هذا المجلد. قد يكون محمياً أو الرابط لا يسمح بالوصول للمجلدات الفرعية.');
+                return back()->with('error', 'لا يمكن فتح هذا المجلد');
             }
 
             $data = $response->json();
+
+            // التحقق من وجود entries
+            if (! isset($data['entries']) || ! is_array($data['entries'])) {
+                \Log::error('Invalid subfolder response: '.json_encode($data));
+
+                return back()->with('error', 'تنسيق استجابة غير صالح من Dropbox');
+            }
+
             $items = $this->organizeItems($data['entries']);
 
             return view('dropbox.browse', [
@@ -248,16 +246,6 @@ class DropboxController extends Controller
 
             return back()->with('error', 'خطأ: '.$e->getMessage());
         }
-    }
-
-    /**
-     * طريقة بديلة لتصفح المجلدات المشاركة
-     * (لم تعد مستخدمة - محفوظة للرجوع إليها)
-     */
-    private function browseSharedSubfolderAlternative($accessToken, $sharedUrl, $path)
-    {
-        // هذه الدالة لم تعد تُستخدم
-        return back()->with('error', 'الطريقة البديلة غير مدعومة حالياً');
     }
 
     /**
@@ -315,8 +303,8 @@ class DropboxController extends Controller
             return back()->with('error', 'يجب تسجيل الدخول أولاً');
         }
 
-        $sharedUrl = $request->input('shared_url');
-        $path = $request->input('path');
+        $sharedUrl = $request->input('shared_url') ?? $request->query('shared_url');
+        $path = $request->input('path') ?? $request->query('path');
 
         if (! $sharedUrl || ! $path) {
             return back()->with('error', 'معلومات غير كاملة');
@@ -341,7 +329,6 @@ class DropboxController extends Controller
             $filename = basename($path);
             $extension = pathinfo($filename, PATHINFO_EXTENSION);
 
-            // التحقق من حجم الملف (حد أقصى 1MB للمعاينة)
             if (strlen($content) > 1048576) {
                 return back()->with('error', 'الملف كبير جداً للمعاينة (أكثر من 1MB)');
             }
@@ -357,6 +344,198 @@ class DropboxController extends Controller
         } catch (\Exception $e) {
             return back()->with('error', 'خطأ: '.$e->getMessage());
         }
+    }
+
+    /**
+     * البحث والمطابقة في الملفات - NEW
+     */
+    public function searchAndMatch(Request $request)
+    {
+        $accessToken = Session::get('dropbox_access_token');
+
+        if (! $accessToken) {
+            return back()->with('error', 'يجب تسجيل الدخول أولاً');
+        }
+
+        // إذا كان GET request، نعرض الصفحة فقط
+        if ($request->isMethod('get')) {
+            return view('dropbox.search-results', [
+                'producerName' => '',
+                'wastesLocation' => '',
+                'matchingFiles' => [],
+                'nonMatchingFiles' => [],
+                'totalFiles' => 0,
+                'sharedUrl' => $request->query('shared_url') ?? Session::get('current_shared_url'),
+                'currentPath' => $request->query('current_path', ''),
+            ]);
+        }
+
+        $producerName = $request->input('producer_name');
+        $wastesLocation = $request->input('wastes_location');
+        $sharedUrl = $request->input('shared_url') ?? Session::get('current_shared_url');
+        $currentPath = $request->input('current_path', '');
+
+        if (! $producerName && ! $wastesLocation) {
+            return back()->with('error', 'الرجاء إدخال قيمة واحدة على الأقل للبحث');
+        }
+
+        if (! $sharedUrl) {
+            return back()->with('error', 'رابط مشارك مطلوب');
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$accessToken,
+                'Content-Type' => 'application/json',
+            ])->post('https://api.dropboxapi.com/2/files/list_folder', [
+                'path' => $currentPath,
+                'shared_link' => ['url' => $sharedUrl],
+                'recursive' => true,
+            ]);
+
+            if ($response->failed()) {
+                return back()->with('error', 'فشل قراءة الملفات');
+            }
+
+            $data = $response->json();
+
+            // التحقق من وجود entries
+            if (! isset($data['entries']) || ! is_array($data['entries'])) {
+                \Log::error('Invalid search response: '.json_encode($data));
+
+                return back()->with('error', 'تنسيق استجابة غير صالح من Dropbox');
+            }
+
+            $allFiles = $data['entries'];
+
+            $textFiles = array_filter($allFiles, function ($entry) {
+                if ($entry['.tag'] !== 'file') {
+                    return false;
+                }
+                // التحقق من وجود اسم الملف
+                if (! isset($entry['name'])) {
+                    return false;
+                }
+                $extension = pathinfo($entry['name'], PATHINFO_EXTENSION);
+
+                return $this->isPreviewable($extension);
+            });
+
+            $matchingFiles = [];
+            $nonMatchingFiles = [];
+
+            foreach ($textFiles as $file) {
+                // الحصول على المسار بشكل آمن
+                $filePath = $file['path_display'] ?? ($file['path_lower'] ?? null);
+                if (! $filePath) {
+                    \Log::warning('File without path: '.json_encode($file));
+
+                    continue;
+                }
+
+                $fileContent = $this->downloadFileContent($accessToken, $sharedUrl, $filePath);
+
+                if ($fileContent === null) {
+                    continue;
+                }
+
+                $hasProducer = empty($producerName) || $this->matchesField($fileContent, 'Producer Name', $producerName);
+                $hasWastes = empty($wastesLocation) || $this->matchesField($fileContent, 'Wastes Location', $wastesLocation);
+
+                $fileName = $file['name'] ?? basename($filePath);
+
+                $fileInfo = [
+                    'name' => $fileName,
+                    'path' => $filePath,
+                    'size' => $file['size'] ?? 0,
+                    'has_producer' => $hasProducer,
+                    'has_wastes' => $hasWastes,
+                    'producer_found' => $this->extractValue($fileContent, 'Producer Name'),
+                    'wastes_found' => $this->extractValue($fileContent, 'Wastes Location'),
+                ];
+
+                if ($hasProducer && $hasWastes) {
+                    $matchingFiles[] = $fileInfo;
+                } else {
+                    $fileInfo['missing'] = [];
+                    if (! $hasProducer && ! empty($producerName)) {
+                        $fileInfo['missing'][] = 'Producer Name: '.$producerName;
+                    }
+                    if (! $hasWastes && ! empty($wastesLocation)) {
+                        $fileInfo['missing'][] = 'Wastes Location: '.$wastesLocation;
+                    }
+                    $nonMatchingFiles[] = $fileInfo;
+                }
+            }
+
+            return view('dropbox.search-results', [
+                'producerName' => $producerName,
+                'wastesLocation' => $wastesLocation,
+                'matchingFiles' => $matchingFiles,
+                'nonMatchingFiles' => $nonMatchingFiles,
+                'totalFiles' => count($textFiles),
+                'sharedUrl' => $sharedUrl,
+                'currentPath' => $currentPath,
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Search Error: '.$e->getMessage());
+
+            return back()->with('error', 'خطأ: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * تحميل محتوى الملف
+     */
+    private function downloadFileContent($accessToken, $sharedUrl, $path)
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$accessToken,
+                'Dropbox-API-Arg' => json_encode([
+                    'path' => $path,
+                    'shared_link' => ['url' => $sharedUrl],
+                ]),
+            ])->get('https://content.dropboxapi.com/2/files/download');
+
+            if ($response->failed()) {
+                return null;
+            }
+
+            $content = $response->body();
+
+            if (strlen($content) > 5242880) {
+                return null;
+            }
+
+            return $content;
+
+        } catch (\Exception $e) {
+            \Log::error('Download Error for '.$path.': '.$e->getMessage());
+
+            return null;
+        }
+    }
+
+    /**
+     * استخراج القيمة من المحتوى (يدعم السطور المتعددة)
+     */
+    private function extractValue($content, $fieldName)
+    {
+        // نمط محسّن يدعم القيم متعددة الأسطر ويتوقف عند الحقل التالي
+        $pattern = '/'.preg_quote($fieldName, '/').'\s*:\s*\n?(.*?)(?=\n(?:[A-Z][a-zA-Z\s]+\s*:|Part \d+|Manifest |Trade License|Mobile No\.|Email|Company Name|Driver Name|License Plate|Phone No\.|Facility\s*:|City\s*:|Street Name|Waste Description|Collection Point)|$)/s';
+
+        if (preg_match($pattern, $content, $matches)) {
+            $value = trim($matches[1]);
+            // تنظيف القيمة: إزالة الأسطر الفارغة والمسافات الزائدة
+            $value = preg_replace('/\s+/', ' ', $value);
+            $value = trim($value);
+
+            return $value ?: 'Not Found';
+        }
+
+        return 'Not Found';
     }
 
     /**
@@ -376,23 +555,28 @@ class DropboxController extends Controller
      */
     private function organizeItems($entries)
     {
-        $items = [
-            'folders' => [],
-            'files' => [],
-        ];
+        $items = ['folders' => [], 'files' => []];
 
         foreach ($entries as $entry) {
+            // تجاهل العناصر بدون مسار
+            $path = $entry['path_display'] ?? ($entry['path_lower'] ?? null);
+            if (! $path) {
+                \Log::warning('Entry without path: '.json_encode($entry));
+
+                continue;
+            }
+
             if ($entry['.tag'] === 'folder') {
                 $items['folders'][] = [
-                    'name' => $entry['name'],
-                    'path' => $entry['path_display'] ?? $entry['path_lower'],
+                    'name' => $entry['name'] ?? basename($path),
+                    'path' => $path,
                 ];
-            } else {
-                $extension = pathinfo($entry['name'], PATHINFO_EXTENSION);
-
+            } elseif ($entry['.tag'] === 'file') {
+                $fileName = $entry['name'] ?? basename($path);
+                $extension = pathinfo($fileName, PATHINFO_EXTENSION);
                 $items['files'][] = [
-                    'name' => $entry['name'],
-                    'path' => $entry['path_display'] ?? $entry['path_lower'],
+                    'name' => $fileName,
+                    'path' => $path,
                     'size' => $entry['size'] ?? 0,
                     'modified' => $entry['server_modified'] ?? null,
                     'extension' => strtolower($extension),
@@ -405,9 +589,6 @@ class DropboxController extends Controller
         return $items;
     }
 
-    /**
-     * تحقق إذا الملف قابل للتعديل
-     */
     private function isEditable($extension)
     {
         $editable = ['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'php', 'py', 'java'];
@@ -415,9 +596,6 @@ class DropboxController extends Controller
         return in_array(strtolower($extension), $editable);
     }
 
-    /**
-     * التحقق إذا الملف قابل للمعاينة
-     */
     private function isPreviewable($extension)
     {
         $previewable = [

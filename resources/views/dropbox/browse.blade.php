@@ -11,8 +11,12 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
     }
 
-    .breadcrumb-custom .breadcrumb {
-        margin: 0;
+    .action-bar {
+        background: white;
+        padding: 1rem 1.5rem;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        margin-bottom: 1rem;
     }
 
     .folder-item {
@@ -91,12 +95,28 @@
     .btn-action:hover {
         transform: translateY(-2px);
     }
+
+    .btn-search-match {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        border: none;
+        padding: 0.5rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .btn-search-match:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+        color: white;
+    }
 </style>
 @endpush
 
 @section('content')
 {{-- Breadcrumb --}}
-<div class="breadcrumb-custom mb-4">
+<div class="breadcrumb-custom mb-3">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item">
@@ -132,6 +152,23 @@
     </nav>
 </div>
 
+{{-- Action Bar with Search Button --}}
+<div class="action-bar">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <a href="{{ route('dropbox.search.match') }}?shared_url={{ urlencode($sharedUrl) }}&current_path={{ urlencode($currentPath) }}" 
+               class="btn btn-search-match">
+                <i class="bi bi-search me-2"></i>البحث والمطابقة في الملفات
+            </a>
+        </div>
+        <div>
+            <a href="{{ route('dropbox.index') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-return-right"></i> رجوع للرئيسية
+            </a>
+        </div>
+    </div>
+</div>
+
 {{-- Content --}}
 <div class="card-custom">
     <div class="card-header-custom">
@@ -140,9 +177,6 @@
                 <i class="bi bi-folder2-open me-2"></i>
                 محتوى المجلد
             </h4>
-            <a href="{{ route('dropbox.index') }}" class="btn btn-light btn-sm">
-                <i class="bi bi-arrow-return-right"></i> رجوع
-            </a>
         </div>
     </div>
 

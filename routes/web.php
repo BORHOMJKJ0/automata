@@ -29,3 +29,5 @@ Route::match(['get', 'post'], '/browse-shared', [DropboxController::class, 'brow
 Route::get('/browse-shared-folder', [DropboxController::class, 'browseSharedSubfolder'])->name('dropbox.browse.shared.folder');
 Route::post('/shared/download', [DropboxController::class, 'downloadSharedFile'])->name('dropbox.shared.download');
 Route::get('/shared/preview', [DropboxController::class, 'previewFile'])->name('dropbox.shared.preview');
+Route::match(['get', 'post'], '/search-match', [DropboxController::class, 'searchAndMatch'])
+    ->name('dropbox.search.match');

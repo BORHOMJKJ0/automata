@@ -39,6 +39,7 @@
 
     .result-card:hover {
         box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
     }
 
     .matching-card {
@@ -82,7 +83,7 @@
 
     .field-value {
         color: #495057;
-        word-break: break-all;
+        word-break: break-word;
     }
 
     .missing-info {
@@ -118,6 +119,65 @@
         font-size: 0.9rem;
     }
 
+    /* Loading Overlay */
+    .loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.7);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .loading-overlay.show {
+        display: flex;
+    }
+
+    .loading-content {
+        background: white;
+        padding: 2rem;
+        border-radius: 15px;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .help-text {
+        background: #e7f3ff;
+        border-left: 3px solid #2196F3;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-top: 1rem;
+    }
+
+    .example-box {
+        background: #f8f9fa;
+        border: 1px dashed #dee2e6;
+        padding: 0.5rem;
+        border-radius: 5px;
+        font-family: monospace;
+        font-size: 0.85rem;
+        margin-top: 0.5rem;
+    }
+
     @media (max-width: 768px) {
         .stat-item {
             display: block;
@@ -128,10 +188,19 @@
 @endpush
 
 @section('content')
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-content">
+        <div class="spinner"></div>
+        <h5>جاري البحث في الملفات...</h5>
+        <p class="text-muted mb-0">قد يستغرق هذا بضع دقائق</p>
+    </div>
+</div>
+
 <div class="row justify-content-center">
     <div class="col-lg-10">
         {{-- إحصائيات --}}
-        @if(isset($totalFiles))
+        @if(isset($totalFiles) && $totalFiles > 0)
         <div class="stats-card">
             <div class="stat-item">
                 <span class="stat-number">{{ $totalFiles }}</span>
@@ -153,7 +222,18 @@
             <h4 class="mb-4">
                 <i class="bi bi-search me-2"></i>البحث و مطابقة الملفات
             </h4>
-            <form method="POST" action="{{ route('dropbox.search.match') }}">
+            
+            <div class="help-text mb-3">
+                <strong><i class="bi bi-info-circle me-2"></i>كيفية الاستخدام:</strong>
+                <ul class="mb-2 mt-2">
+                    <li>البحث يتم في جميع الملفات النصية بشكل تكراري</li>
+                    <li>يمكنك البحث بحقل واحد أو حقلين معاً</li>
+                    <li>البحث غير حساس لحالة الأحرف (Case-insensitive)</li>
+                    <li>يدعم البحث الجزئي (Partial matching)</li>
+                </ul>
+            </div>
+
+            <form method="POST" action="{{ route('dropbox.search.match') }}" id="searchForm">
                 @csrf
                 <input type="hidden" name="shared_url" value="{{ $sharedUrl ?? '' }}">
                 <input type="hidden" name="current_path" value="{{ $currentPath ?? '' }}">
@@ -168,7 +248,10 @@
                                class="form-control search-input"
                                value="{{ $producerName ?? '' }}"
                                placeholder="Enter producer name">
-                        <small class="text-muted">Search for: "Producer Name : your_value"</small>
+                        <small class="text-muted">يبحث عن: "Producer Name : your_value"</small>
+                        <div class="example-box">
+                            مثال: Abu Dhabi Waste Management
+                        </div>
                     </div>
                     
                     <div class="col-md-6 mb-3">
@@ -180,17 +263,20 @@
                                class="form-control search-input"
                                value="{{ $wastesLocation ?? '' }}"
                                placeholder="Enter wastes location">
-                        <small class="text-muted">Search for: "Wastes Location : your_value"</small>
+                        <small class="text-muted">يبحث عن: "Wastes Location : your_value"</small>
+                        <div class="example-box">
+                            مثال: Dubai Industrial City
+                        </div>
                     </div>
                 </div>
 
-                <div class="d-flex gap-2">
+                <div class="d-flex gap-2 flex-wrap">
                     <button type="submit" class="btn btn-gradient-primary">
                         <i class="bi bi-search me-2"></i>البحث و المطابقة
                     </button>
                     <a href="{{ route('dropbox.browse.shared.folder') }}?shared_url={{ urlencode($sharedUrl ?? '') }}&path={{ urlencode($currentPath ?? '') }}" 
                        class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-right me-2"></i>الجوع الى الملفات
+                        <i class="bi bi-arrow-right me-2"></i>الرجوع الى الملفات
                     </a>
                 </div>
             </form>
@@ -207,38 +293,45 @@
             @foreach($matchingFiles as $file)
             <div class="result-card matching-card">
                 <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap">
-                    <div class="mb-2 mb-md-0">
+                    <div class="mb-2 mb-md-0 flex-grow-1">
                         <h6 class="mb-1">
                             <i class="bi bi-file-text me-2"></i>{{ $file['name'] }}
                         </h6>
                         <small class="text-muted">{{ $file['path'] }}</small>
+                        <div class="mt-1">
+                            <span class="badge bg-secondary">{{ number_format($file['size'] / 1024, 2) }} KB</span>
+                        </div>
                     </div>
                     <span class="status-badge badge-match">
-                        <i class="bi bi-check-circle me-1"></i>مطابق
+                        <i class="bi bi-check-circle me-1"></i>مطابق تماماً
                     </span>
                 </div>
 
                 <div class="row mt-3">
-                    @if(!empty($wastesLocation))
+                    @if(!empty($producerName))
                     <div class="col-md-6 mb-2">
                         <div class="field-info">
-                            <div class="field-label">Wastes Location:</div>
-                            <div class="field-value">{{ $file['wastes_found'] }}</div>
+                            <div class="field-label">
+                                <i class="bi bi-building me-1"></i>Producer Name:
+                            </div>
+                            <div class="field-value">{{ $file['producer_found'] }}</div>
                         </div>
                     </div>
                     @endif
                     
-                    @if(!empty($producerName))
+                    @if(!empty($wastesLocation))
                     <div class="col-md-6 mb-2">
                         <div class="field-info">
-                            <div class="field-label">Producer Name:</div>
-                            <div class="field-value">{{ $file['producer_found'] }}</div>
+                            <div class="field-label">
+                                <i class="bi bi-geo-alt me-1"></i>Wastes Location:
+                            </div>
+                            <div class="field-value">{{ $file['wastes_found'] }}</div>
                         </div>
                     </div>
                     @endif
                 </div>
 
-                <div class="mt-3">
+                <div class="mt-3 d-flex gap-2 flex-wrap">
                     <a href="{{ route('dropbox.shared.preview') }}?shared_url={{ urlencode($sharedUrl) }}&path={{ urlencode($file['path']) }}" 
                        class="btn btn-sm btn-outline-info">
                         <i class="bi bi-eye me-1"></i>معاينة
@@ -268,47 +361,60 @@
             @foreach($nonMatchingFiles as $file)
             <div class="result-card non-matching-card">
                 <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap">
-                    <div class="mb-2 mb-md-0">
+                    <div class="mb-2 mb-md-0 flex-grow-1">
                         <h6 class="mb-1">
                             <i class="bi bi-file-text me-2"></i>{{ $file['name'] }}
                         </h6>
                         <small class="text-muted">{{ $file['path'] }}</small>
+                        <div class="mt-1">
+                            <span class="badge bg-secondary">{{ number_format($file['size'] / 1024, 2) }} KB</span>
+                        </div>
                     </div>
                     <span class="status-badge badge-no-match">
                         <i class="bi bi-x-circle me-1"></i>غير مطابق
                     </span>
                 </div>
 
+                @if(isset($file['missing']) && count($file['missing']) > 0)
                 <div class="missing-info">
-                    <strong><i class="bi bi-exclamation-triangle me-2"></i>مفقود أو مختلف:</strong>
+                    <strong><i class="bi bi-exclamation-triangle me-2"></i>القيم المطلوبة غير موجودة أو مختلفة:</strong>
                     <ul class="mb-0 mt-2">
                         @foreach($file['missing'] as $missing)
                         <li>{{ $missing }}</li>
                         @endforeach
                     </ul>
                 </div>
+                @endif
 
                 <div class="row mt-3">
-                    @if(!empty($wastesLocation))
+                    @if(!empty($producerName))
                     <div class="col-md-6 mb-2">
                         <div class="field-info">
-                            <div class="field-label">Wastes Location الموجود:</div>
-                            <div class="field-value">{{ $file['wastes_found'] }}</div>
+                            <div class="field-label">
+                                <i class="bi bi-building me-1"></i>Producer Name الموجود:
+                            </div>
+                            <div class="field-value {{ $file['producer_found'] === 'Not Found' ? 'text-danger' : '' }}">
+                                {{ $file['producer_found'] }}
+                            </div>
                         </div>
                     </div>
                     @endif
                     
-                    @if(!empty($producerName))
+                    @if(!empty($wastesLocation))
                     <div class="col-md-6 mb-2">
                         <div class="field-info">
-                            <div class="field-label">Producer Name الموجود:</div>
-                            <div class="field-value">{{ $file['producer_found'] }}</div>
+                            <div class="field-label">
+                                <i class="bi bi-geo-alt me-1"></i>Wastes Location الموجود:
+                            </div>
+                            <div class="field-value {{ $file['wastes_found'] === 'Not Found' ? 'text-danger' : '' }}">
+                                {{ $file['wastes_found'] }}
+                            </div>
                         </div>
                     </div>
                     @endif
                 </div>
 
-                <div class="mt-3">
+                <div class="mt-3 d-flex gap-2 flex-wrap">
                     <a href="{{ route('dropbox.shared.preview') }}?shared_url={{ urlencode($sharedUrl) }}&path={{ urlencode($file['path']) }}" 
                        class="btn btn-sm btn-outline-info">
                         <i class="bi bi-eye me-1"></i>معاينة
@@ -328,13 +434,41 @@
         @endif
 
         {{-- رسالة في حالة عدم وجود نتائج --}}
-        @if(isset($matchingFiles) && isset($nonMatchingFiles) && count($matchingFiles) === 0 && count($nonMatchingFiles) === 0)
+        @if(isset($matchingFiles) && isset($nonMatchingFiles) && count($matchingFiles) === 0 && count($nonMatchingFiles) === 0 && isset($totalFiles) && $totalFiles === 0)
         <div class="text-center py-5">
             <div style="font-size: 5rem; opacity: 0.3;">🔍</div>
-            <h5 class="text-muted mt-3">لا توجد نتائج بعد</h5>
-            <p class="text-muted">أدخل معايير البحث أعلاه واضغط "بحث ومطابقة"</p>
+            <h5 class="text-muted mt-3">ابدأ البحث الآن</h5>
+            <p class="text-muted">أدخل معايير البحث أعلاه واضغط "البحث والمطابقة"</p>
+        </div>
+        @endif
+
+        {{-- رسالة عند عدم وجود ملفات نصية --}}
+        @if(isset($totalFiles) && $totalFiles === 0 && isset($matchingFiles))
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>لم يتم العثور على ملفات نصية قابلة للبحث في المجلد المحدد.</strong>
+            <p class="mb-0 mt-2">تأكد من وجود ملفات نصية (.txt, .log, .md, إلخ) في المجلد.</p>
         </div>
         @endif
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+    document.getElementById('searchForm').addEventListener('submit', function(e) {
+        // التحقق من وجود قيمة واحدة على الأقل
+        const producerName = document.querySelector('input[name="producer_name"]').value.trim();
+        const wastesLocation = document.querySelector('input[name="wastes_location"]').value.trim();
+        
+        if (!producerName && !wastesLocation) {
+            e.preventDefault();
+            alert('الرجاء إدخال قيمة واحدة على الأقل للبحث');
+            return false;
+        }
+        
+        // إظهار شاشة التحميل
+        document.getElementById('loadingOverlay').classList.add('show');
+    });
+</script>
+@endpush

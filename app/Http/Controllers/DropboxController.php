@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 
 class DropboxController extends Controller
@@ -121,7 +122,7 @@ class DropboxController extends Controller
             if ($response->failed()) {
                 $errorData = $response->json();
                 $errorMsg = $errorData['error_summary'] ?? 'فشل قراءة الرابط المشارك';
-                \Log::error('Shared Link Metadata Error: '.$errorMsg);
+                Log::error('Shared Link Metadata Error: '.$errorMsg);
 
                 return redirect()->route('dropbox.index')
                     ->with('error', 'خطأ: '.$errorMsg);
@@ -147,7 +148,7 @@ class DropboxController extends Controller
             if ($listResponse->failed()) {
                 $errorData = $listResponse->json();
                 $errorMsg = $errorData['error_summary'] ?? 'فشل قراءة محتوى المجلد';
-                \Log::error('List Folder Error: '.$errorMsg);
+                Log::error('List Folder Error: '.$errorMsg);
 
                 return redirect()->route('dropbox.index')
                     ->with('error', 'خطأ: '.$errorMsg);
@@ -155,9 +156,8 @@ class DropboxController extends Controller
 
             $data = $listResponse->json();
 
-            // التحقق من وجود entries
             if (! isset($data['entries']) || ! is_array($data['entries'])) {
-                \Log::error('Invalid response format: '.json_encode($data));
+                Log::error('Invalid response format: '.json_encode($data));
 
                 return redirect()->route('dropbox.index')
                     ->with('error', 'تنسيق استجابة غير صالح من Dropbox');
@@ -172,7 +172,7 @@ class DropboxController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Exception in browseSharedLink: '.$e->getMessage());
+            Log::error('Exception in browseSharedLink: '.$e->getMessage());
 
             return redirect()->route('dropbox.index')
                 ->with('error', 'خطأ: '.$e->getMessage());
@@ -219,16 +219,15 @@ class DropboxController extends Controller
             if ($response->failed()) {
                 $errorData = $response->json();
                 $errorMsg = $errorData['error_summary'] ?? 'فشل قراءة المجلد';
-                \Log::error('Browse Subfolder Error: '.$errorMsg);
+                Log::error('Browse Subfolder Error: '.$errorMsg);
 
                 return back()->with('error', 'لا يمكن فتح هذا المجلد');
             }
 
             $data = $response->json();
 
-            // التحقق من وجود entries
             if (! isset($data['entries']) || ! is_array($data['entries'])) {
-                \Log::error('Invalid subfolder response: '.json_encode($data));
+                Log::error('Invalid subfolder response: '.json_encode($data));
 
                 return back()->with('error', 'تنسيق استجابة غير صالح من Dropbox');
             }
@@ -242,7 +241,7 @@ class DropboxController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Exception in browseSharedSubfolder: '.$e->getMessage());
+            Log::error('Exception in browseSharedSubfolder: '.$e->getMessage());
 
             return back()->with('error', 'خطأ: '.$e->getMessage());
         }
@@ -347,7 +346,7 @@ class DropboxController extends Controller
     }
 
     /**
-     * البحث والمطابقة في الملفات - NEW
+     * البحث والمطابقة في الملفات
      */
     public function searchAndMatch(Request $request)
     {
@@ -370,12 +369,12 @@ class DropboxController extends Controller
             ]);
         }
 
-        $producerName = $request->input('producer_name');
-        $wastesLocation = $request->input('wastes_location');
+        $producerName = trim($request->input('producer_name', ''));
+        $wastesLocation = trim($request->input('wastes_location', ''));
         $sharedUrl = $request->input('shared_url') ?? Session::get('current_shared_url');
         $currentPath = $request->input('current_path', '');
 
-        if (! $producerName && ! $wastesLocation) {
+        if (empty($producerName) && empty($wastesLocation)) {
             return back()->with('error', 'الرجاء إدخال قيمة واحدة على الأقل للبحث');
         }
 
@@ -384,35 +383,16 @@ class DropboxController extends Controller
         }
 
         try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer '.$accessToken,
-                'Content-Type' => 'application/json',
-            ])->post('https://api.dropboxapi.com/2/files/list_folder', [
-                'path' => $currentPath,
-                'shared_link' => ['url' => $sharedUrl],
-                'recursive' => true,
-            ]);
+            // جلب جميع الملفات بشكل تكراري
+            $allEntries = $this->getAllFilesRecursive($accessToken, $sharedUrl, $currentPath);
 
-            if ($response->failed()) {
-                return back()->with('error', 'فشل قراءة الملفات');
-            }
+            Log::info('Total entries found: '.count($allEntries));
 
-            $data = $response->json();
-
-            // التحقق من وجود entries
-            if (! isset($data['entries']) || ! is_array($data['entries'])) {
-                \Log::error('Invalid search response: '.json_encode($data));
-
-                return back()->with('error', 'تنسيق استجابة غير صالح من Dropbox');
-            }
-
-            $allFiles = $data['entries'];
-
-            $textFiles = array_filter($allFiles, function ($entry) {
+            // تصفية الملفات النصية فقط
+            $textFiles = array_filter($allEntries, function ($entry) {
                 if ($entry['.tag'] !== 'file') {
                     return false;
                 }
-                // التحقق من وجود اسم الملف
                 if (! isset($entry['name'])) {
                     return false;
                 }
@@ -421,24 +401,32 @@ class DropboxController extends Controller
                 return $this->isPreviewable($extension);
             });
 
+            Log::info('Text files found: '.count($textFiles));
+
             $matchingFiles = [];
             $nonMatchingFiles = [];
+            $processedCount = 0;
 
             foreach ($textFiles as $file) {
-                // الحصول على المسار بشكل آمن
                 $filePath = $file['path_display'] ?? ($file['path_lower'] ?? null);
                 if (! $filePath) {
-                    \Log::warning('File without path: '.json_encode($file));
+                    Log::warning('File without path: '.json_encode($file));
 
                     continue;
                 }
+
+                $processedCount++;
+                Log::info("Processing file {$processedCount}: {$filePath}");
 
                 $fileContent = $this->downloadFileContent($accessToken, $sharedUrl, $filePath);
 
                 if ($fileContent === null) {
+                    Log::warning("Could not read file: {$filePath}");
+
                     continue;
                 }
 
+                // استخدام matchesField بدلاً من البحث المباشر
                 $hasProducer = empty($producerName) || $this->matchesField($fileContent, 'Producer Name', $producerName);
                 $hasWastes = empty($wastesLocation) || $this->matchesField($fileContent, 'Wastes Location', $wastesLocation);
 
@@ -456,6 +444,7 @@ class DropboxController extends Controller
 
                 if ($hasProducer && $hasWastes) {
                     $matchingFiles[] = $fileInfo;
+                    Log::info("✓ Matching file: {$fileName}");
                 } else {
                     $fileInfo['missing'] = [];
                     if (! $hasProducer && ! empty($producerName)) {
@@ -465,8 +454,11 @@ class DropboxController extends Controller
                         $fileInfo['missing'][] = 'Wastes Location: '.$wastesLocation;
                     }
                     $nonMatchingFiles[] = $fileInfo;
+                    Log::info("✗ Non-matching file: {$fileName}");
                 }
             }
+
+            Log::info('Search completed. Matching: '.count($matchingFiles).', Non-matching: '.count($nonMatchingFiles));
 
             return view('dropbox.search-results', [
                 'producerName' => $producerName,
@@ -479,10 +471,65 @@ class DropboxController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Search Error: '.$e->getMessage());
+            Log::error('Search Error: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
 
             return back()->with('error', 'خطأ: '.$e->getMessage());
         }
+    }
+
+    /**
+     * جلب جميع الملفات بشكل تكراري (حل مشكلة التكرار)
+     */
+    private function getAllFilesRecursive($accessToken, $sharedUrl, $path = '', $cursor = null)
+    {
+        $allEntries = [];
+
+        try {
+            if ($cursor) {
+                // Continue with cursor
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer '.$accessToken,
+                    'Content-Type' => 'application/json',
+                ])->post('https://api.dropboxapi.com/2/files/list_folder/continue', [
+                    'cursor' => $cursor,
+                ]);
+            } else {
+                // Initial request
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer '.$accessToken,
+                    'Content-Type' => 'application/json',
+                ])->post('https://api.dropboxapi.com/2/files/list_folder', [
+                    'path' => $path,
+                    'shared_link' => ['url' => $sharedUrl],
+                    'recursive' => true,
+                    'limit' => 2000,
+                ]);
+            }
+
+            if ($response->failed()) {
+                Log::error('Failed to list folder: '.$response->body());
+
+                return $allEntries;
+            }
+
+            $data = $response->json();
+
+            if (isset($data['entries']) && is_array($data['entries'])) {
+                $allEntries = array_merge($allEntries, $data['entries']);
+            }
+
+            // If there are more entries, continue fetching
+            if (isset($data['has_more']) && $data['has_more'] && isset($data['cursor'])) {
+                $moreEntries = $this->getAllFilesRecursive($accessToken, $sharedUrl, $path, $data['cursor']);
+                $allEntries = array_merge($allEntries, $moreEntries);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Exception in getAllFilesRecursive: '.$e->getMessage());
+        }
+
+        return $allEntries;
     }
 
     /**
@@ -491,7 +538,7 @@ class DropboxController extends Controller
     private function downloadFileContent($accessToken, $sharedUrl, $path)
     {
         try {
-            $response = Http::withHeaders([
+            $response = Http::timeout(30)->withHeaders([
                 'Authorization' => 'Bearer '.$accessToken,
                 'Dropbox-API-Arg' => json_encode([
                     'path' => $path,
@@ -500,40 +547,95 @@ class DropboxController extends Controller
             ])->get('https://content.dropboxapi.com/2/files/download');
 
             if ($response->failed()) {
+                Log::error("Failed to download file {$path}: ".$response->body());
+
                 return null;
             }
 
             $content = $response->body();
 
+            // تجاهل الملفات الكبيرة جداً (أكثر من 5MB)
             if (strlen($content) > 5242880) {
+                Log::warning("File too large, skipping: {$path}");
+
                 return null;
             }
 
             return $content;
 
         } catch (\Exception $e) {
-            \Log::error('Download Error for '.$path.': '.$e->getMessage());
+            Log::error('Download Error for '.$path.': '.$e->getMessage());
 
             return null;
         }
     }
 
     /**
-     * استخراج القيمة من المحتوى (يدعم السطور المتعددة)
+     * التحقق من مطابقة حقل معين (الدالة المفقودة - تم إصلاحها)
+     */
+    private function matchesField($content, $fieldName, $searchValue)
+    {
+        if (empty($searchValue)) {
+            return true;
+        }
+
+        // استخراج القيمة من المحتوى
+        $extractedValue = $this->extractValue($content, $fieldName);
+
+        // تجاهل "Not Found"
+        if ($extractedValue === 'Not Found') {
+            return false;
+        }
+
+        // تحويل القيم لأحرف صغيرة للمقارنة
+        $extractedLower = mb_strtolower(trim($extractedValue), 'UTF-8');
+        $searchLower = mb_strtolower(trim($searchValue), 'UTF-8');
+
+        // البحث الجزئي: إذا كانت القيمة المستخرجة تحتوي على القيمة المطلوبة
+        $matches = strpos($extractedLower, $searchLower) !== false;
+
+        if ($matches) {
+            Log::info("✓ Field '{$fieldName}' matches: '{$extractedValue}' contains '{$searchValue}'");
+        } else {
+            Log::info("✗ Field '{$fieldName}' does not match: '{$extractedValue}' vs '{$searchValue}'");
+        }
+
+        return $matches;
+    }
+
+    /**
+     * استخراج القيمة من المحتوى (محسّن)
      */
     private function extractValue($content, $fieldName)
     {
-        // نمط محسّن يدعم القيم متعددة الأسطر ويتوقف عند الحقل التالي
-        $pattern = '/'.preg_quote($fieldName, '/').'\s*:\s*\n?(.*?)(?=\n(?:[A-Z][a-zA-Z\s]+\s*:|Part \d+|Manifest |Trade License|Mobile No\.|Email|Company Name|Driver Name|License Plate|Phone No\.|Facility\s*:|City\s*:|Street Name|Waste Description|Collection Point)|$)/s';
+        // إزالة BOM إذا كان موجوداً
+        $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
 
-        if (preg_match($pattern, $content, $matches)) {
-            $value = trim($matches[1]);
-            // تنظيف القيمة: إزالة الأسطر الفارغة والمسافات الزائدة
-            $value = preg_replace('/\s+/', ' ', $value);
-            $value = trim($value);
+        // نمط محسّن يدعم القيم متعددة الأسطر
+        $patterns = [
+            // Pattern 1: Field followed by colon and value on same or next line
+            '/'.preg_quote($fieldName, '/').'\s*:\s*\n?\s*([^\n]+(?:\n(?![A-Z][a-zA-Z\s]+\s*:|Part \d+|Manifest |Trade License|Mobile No\.|Email|Company Name|Driver Name|License Plate|Phone No\.|Facility\s*:|City\s*:|Street Name|Waste Description|Collection Point)[^\n]+)*)/is',
 
-            return $value ?: 'Not Found';
+            // Pattern 2: More flexible - captures until next field or end
+            '/'.preg_quote($fieldName, '/').'\s*:\s*\n?\s*(.+?)(?=\n\s*[A-Z][a-zA-Z\s]+\s*:|$)/is',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $content, $matches)) {
+                $value = trim($matches[1]);
+                // تنظيف القيمة: إزالة الأسطر الفارغة والمسافات الزائدة
+                $value = preg_replace('/\s+/', ' ', $value);
+                $value = trim($value);
+
+                if (! empty($value)) {
+                    Log::info("Extracted '{$fieldName}': {$value}");
+
+                    return $value;
+                }
+            }
         }
+
+        Log::info("Field '{$fieldName}' not found in content");
 
         return 'Not Found';
     }
@@ -545,6 +647,7 @@ class DropboxController extends Controller
     {
         Session::forget('dropbox_access_token');
         Session::forget('dropbox_account_id');
+        Session::forget('current_shared_url');
 
         return redirect()->route('dropbox.index')
             ->with('success', 'تم تسجيل الخروج بنجاح');
@@ -558,10 +661,9 @@ class DropboxController extends Controller
         $items = ['folders' => [], 'files' => []];
 
         foreach ($entries as $entry) {
-            // تجاهل العناصر بدون مسار
             $path = $entry['path_display'] ?? ($entry['path_lower'] ?? null);
             if (! $path) {
-                \Log::warning('Entry without path: '.json_encode($entry));
+                Log::warning('Entry without path: '.json_encode($entry));
 
                 continue;
             }

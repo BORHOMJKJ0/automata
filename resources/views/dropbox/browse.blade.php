@@ -100,16 +100,36 @@
         background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
         color: white;
         border: none;
-        padding: 0.5rem 1.5rem;
+        padding: 0.75rem 1.5rem;
         border-radius: 10px;
         font-weight: 600;
         transition: all 0.3s ease;
+        box-shadow: 0 2px 10px rgba(245, 87, 108, 0.2);
     }
 
     .btn-search-match:hover {
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
         color: white;
+    }
+
+    .btn-search-match i {
+        font-size: 1.1rem;
+    }
+
+    @media (max-width: 768px) {
+        .folder-icon {
+            font-size: 2rem;
+        }
+        
+        .action-bar {
+            padding: 1rem;
+        }
+        
+        .btn-search-match {
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
     }
 </style>
 @endpush
@@ -145,7 +165,7 @@
                 @endforeach
             @else
                 <li class="breadcrumb-item active">
-                    <i class="bi bi-folder"></i> الجذر
+                    <i class="bi bi-folder-fill"></i> المجلد الرئيسي
                 </li>
             @endif
         </ol>
@@ -155,15 +175,25 @@
 {{-- Action Bar with Search Button --}}
 <div class="action-bar">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
+        <div class="flex-grow-1">
             <a href="{{ route('dropbox.search.match') }}?shared_url={{ urlencode($sharedUrl) }}&current_path={{ urlencode($currentPath) }}" 
                class="btn btn-search-match">
                 <i class="bi bi-search me-2"></i>البحث والمطابقة في الملفات
             </a>
         </div>
-        <div>
+        <div class="d-flex gap-2">
+            @if($currentPath)
+                @php
+                    $parentPath = dirname($currentPath);
+                    if ($parentPath === '.') $parentPath = '';
+                @endphp
+                <a href="{{ route('dropbox.browse.shared.folder') }}?shared_url={{ urlencode($sharedUrl) }}&path={{ urlencode($parentPath) }}" 
+                   class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-up"></i> للأعلى
+                </a>
+            @endif
             <a href="{{ route('dropbox.index') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-return-right"></i> رجوع للرئيسية
+                <i class="bi bi-arrow-return-right"></i> الرئيسية
             </a>
         </div>
     </div>
@@ -177,6 +207,9 @@
                 <i class="bi bi-folder2-open me-2"></i>
                 محتوى المجلد
             </h4>
+            <span class="badge bg-light text-dark">
+                {{ count($items['folders']) + count($items['files']) }} عنصر
+            </span>
         </div>
     </div>
 
@@ -193,7 +226,10 @@
                     <a href="{{ route('dropbox.browse.shared.folder') }}?shared_url={{ urlencode($sharedUrl) }}&path={{ urlencode($folder['path']) }}"
                        class="folder-item">
                         <span class="folder-icon">📁</span>
-                        <span class="fw-bold">{{ $folder['name'] }}</span>
+                        <div>
+                            <span class="fw-bold d-block">{{ $folder['name'] }}</span>
+                            <small class="text-muted">{{ $folder['path'] }}</small>
+                        </div>
                     </a>
                 @endforeach
             </div>
@@ -240,6 +276,7 @@
                                                 'pptx' => ['icon' => '📙', 'color' => '#fd7e14'],
                                                 'txt' => ['icon' => '📝', 'color' => '#6c757d'],
                                                 'md' => ['icon' => '📝', 'color' => '#6c757d'],
+                                                'log' => ['icon' => '📋', 'color' => '#6c757d'],
                                                 'jpg' => ['icon' => '🖼️', 'color' => '#0dcaf0'],
                                                 'jpeg' => ['icon' => '🖼️', 'color' => '#0dcaf0'],
                                                 'png' => ['icon' => '🖼️', 'color' => '#0dcaf0'],
@@ -262,6 +299,11 @@
                                         @endphp
                                         <span class="me-2 fs-4">{{ $fileIcon['icon'] }}</span>
                                         <span>{{ $file['name'] }}</span>
+                                        @if($file['is_previewable'])
+                                            <span class="badge bg-info ms-2" style="font-size: 0.7rem;">
+                                                <i class="bi bi-eye"></i> قابل للمعاينة
+                                            </span>
+                                        @endif
                                     </td>
                                     <td>
                                         @if($file['size'] < 1024)
@@ -318,12 +360,19 @@
     </div>
 
     {{-- Footer --}}
-    <div class="card-footer bg-light text-center">
-        <small class="text-muted">
-            <i class="bi bi-folder me-2"></i>{{ count($items['folders']) }} مجلد
-            <span class="mx-2">•</span>
-            <i class="bi bi-file-earmark me-2"></i>{{ count($items['files']) }} ملف
-        </small>
+    <div class="card-footer bg-light">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <small class="text-muted">
+                <i class="bi bi-folder me-2"></i>{{ count($items['folders']) }} مجلد
+                <span class="mx-2">•</span>
+                <i class="bi bi-file-earmark me-2"></i>{{ count($items['files']) }} ملف
+            </small>
+            @if($currentPath)
+                <small class="text-muted">
+                    <i class="bi bi-diagram-3 me-1"></i>المسار: {{ $currentPath }}
+                </small>
+            @endif
+        </div>
     </div>
 </div>
 @endsection

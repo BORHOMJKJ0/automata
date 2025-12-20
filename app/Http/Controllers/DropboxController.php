@@ -644,18 +644,21 @@ class DropboxController extends Controller
     {
         try {
             Log::info("Attempting to download: {$path}");
+            Log::info("Using shared URL: {$sharedUrl}");
 
-            // Use shared link API endpoint - MUST send empty body, not array
+            // For files within a shared folder, we need to use the regular files/download
+            // endpoint with the shared_link parameter, not the sharing/get_shared_link_file endpoint
             $response = Http::timeout(60)
                 ->withHeaders([
                     'Authorization' => 'Bearer '.$accessToken,
                     'Dropbox-API-Arg' => json_encode([
-                        'url' => $sharedUrl,
                         'path' => $path,
+                        'shared_link' => [
+                            'url' => $sharedUrl,
+                        ],
                     ]),
                 ])
-                ->withBody('', 'application/octet-stream') // Explicitly send empty body
-                ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
+                ->post('https://content.dropboxapi.com/2/files/download');
 
             if ($response->successful()) {
                 $size = strlen($response->body());

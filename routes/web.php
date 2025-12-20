@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return redirect()->route('dropbox.index');
 });
+Route::get('/dropbox/test-connection', [TestDropboxController::class, 'testConnection'])
+    ->name('dropbox.test.connection');
 
 // ==================== AUTHENTICATION ====================
 Route::get('/dropbox', [DropboxController::class, 'index'])->name('dropbox.index');

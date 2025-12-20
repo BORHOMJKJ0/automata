@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Smalot\PdfParser\Parser as PdfParser;
 
 class DropboxController extends Controller
@@ -148,7 +149,7 @@ class DropboxController extends Controller
             ?? $request->input('shared_url')
             ?? Session::get('current_shared_url');
 
-        $path = $request->query('path') ?? $request->input('path', '');
+        $path = $request->query('path') ?? $request->input('path', '') ?? '';
 
         if (! $sharedUrl) {
             return redirect()->route('dropbox.index')->with('error', 'رابط مشارك مطلوب');
@@ -190,13 +191,20 @@ class DropboxController extends Controller
         }
 
         try {
+            Log::info("Downloading file: {$path}");
+            Log::info("Shared URL: {$sharedUrl}");
+
             $content = $this->downloadFileContent($accessToken, $sharedUrl, $path);
 
             if (! $content) {
-                return back()->with('error', 'فشل تحميل الملف');
+                Log::error("Failed to download file: {$path}");
+
+                return back()->with('error', 'فشل تحميل الملف - تحقق من الصلاحيات');
             }
 
             $filename = basename($path);
+
+            Log::info("File downloaded successfully: {$filename}, size: ".strlen($content).' bytes');
 
             return response($content)
                 ->header('Content-Type', 'application/octet-stream')
@@ -204,6 +212,7 @@ class DropboxController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Download Error: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
 
             return back()->with('error', 'خطأ: '.$e->getMessage());
         }
@@ -273,7 +282,7 @@ class DropboxController extends Controller
                 'totalFiles' => 0,
                 'allExcelFiles' => [],
                 'sharedUrl' => $request->query('shared_url') ?? Session::get('current_shared_url'),
-                'currentPath' => $request->query('current_path', ''),
+                'currentPath' => $request->query('current_path', '') ?? '',
             ]);
         }
 
@@ -293,11 +302,20 @@ class DropboxController extends Controller
 
         try {
             Log::info('=== Starting Search ===');
+            Log::info("Shared URL: {$sharedUrl}");
+            Log::info("Current Path: {$currentPath}");
             Log::info("Producer: {$producerName}, Location: {$wastesLocation}");
 
-            // Get all files recursively
+            // Get all files recursively - ensure $currentPath is string
             $allEntries = $this->getAllFilesRecursive($accessToken, $sharedUrl, $currentPath);
             Log::info('Total entries found: '.count($allEntries));
+
+            // Debug: Log first few entries
+            if (count($allEntries) > 0) {
+                Log::info('Sample entries: '.json_encode(array_slice($allEntries, 0, 3)));
+            } else {
+                Log::warning('No entries found! This might be a problem.');
+            }
 
             // Categorize files
             $pdfFiles = [];
@@ -466,7 +484,7 @@ class DropboxController extends Controller
             }
 
             // Save Excel
-            $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
+            $writer = new Xlsx($spreadsheet);
             $writer->save($tempExcelPath);
 
             $updatedContent = file_get_contents($tempExcelPath);
@@ -558,9 +576,12 @@ class DropboxController extends Controller
         }
     }
 
-    private function getAllFilesRecursive(string $accessToken, string $sharedUrl, string $path = '', ?string $cursor = null): array
+    private function getAllFilesRecursive(string $accessToken, string $sharedUrl, ?string $path = '', ?string $cursor = null): array
     {
         $allEntries = [];
+
+        // Ensure path is string, not null
+        $path = $path ?? '';
 
         try {
             if ($cursor) {
@@ -577,23 +598,43 @@ class DropboxController extends Controller
                 ])->post('https://api.dropboxapi.com/2/files/list_folder', [
                     'path' => $path,
                     'shared_link' => ['url' => $sharedUrl],
-                    'recursive' => true,
+                    'recursive' => false, // Changed to false for shared links
                     'limit' => 2000,
                 ]);
             }
 
             if ($response->successful()) {
                 $data = $response->json();
-                $allEntries = array_merge($allEntries, $data['entries'] ?? []);
+                $entries = $data['entries'] ?? [];
 
+                Log::info('Found '.count($entries)." entries in path: {$path}");
+
+                foreach ($entries as $entry) {
+                    $allEntries[] = $entry;
+
+                    // If it's a folder, recursively get its contents
+                    if ($entry['.tag'] === 'folder') {
+                        $folderPath = $entry['path_display'] ?? $entry['path_lower'];
+                        if ($folderPath) {
+                            Log::info("Recursively scanning folder: {$folderPath}");
+                            $subEntries = $this->getAllFilesRecursive($accessToken, $sharedUrl, $folderPath);
+                            $allEntries = array_merge($allEntries, $subEntries);
+                        }
+                    }
+                }
+
+                // Handle pagination
                 if (($data['has_more'] ?? false) && isset($data['cursor'])) {
                     $moreEntries = $this->getAllFilesRecursive($accessToken, $sharedUrl, $path, $data['cursor']);
                     $allEntries = array_merge($allEntries, $moreEntries);
                 }
+            } else {
+                Log::error('List folder failed: '.$response->body());
             }
 
         } catch (\Exception $e) {
             Log::error('Recursive List Error: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
 
         return $allEntries;
@@ -602,6 +643,8 @@ class DropboxController extends Controller
     private function downloadFileContent(string $accessToken, string $sharedUrl, string $path): ?string
     {
         try {
+            Log::info("Attempting to download: {$path}");
+
             $response = Http::timeout(60)->withHeaders([
                 'Authorization' => 'Bearer '.$accessToken,
                 'Dropbox-API-Arg' => json_encode([
@@ -611,15 +654,21 @@ class DropboxController extends Controller
             ])->get('https://content.dropboxapi.com/2/files/download');
 
             if ($response->successful()) {
+                $size = strlen($response->body());
+                Log::info("Successfully downloaded {$path}, size: {$size} bytes");
+
                 return $response->body();
             }
 
             Log::error("Download failed for: {$path}");
+            Log::error('Response status: '.$response->status());
+            Log::error('Response body: '.$response->body());
 
             return null;
 
         } catch (\Exception $e) {
             Log::error("Download exception for {$path}: ".$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
 
             return null;
         }
@@ -822,16 +871,15 @@ class DropboxController extends Controller
             }
 
             // Update Excel cells
-            // عدّل أرقام الأعمدة حسب ملف Excel الخاص بك!
-            $worksheet->setCellValue("A{$foundRow}", $pdfData['manifest_number']);      // Manifest Number
-            $worksheet->setCellValue("B{$foundRow}", $pdfData['manifest_date']);        // Manifest Date
-            $worksheet->setCellValue("C{$foundRow}", $pdfData['waste_description']);    // Waste Description
-            $worksheet->setCellValue("D{$foundRow}", $pdfData['quantity']);             // General Waste Quantity
-            $worksheet->setCellValue("E{$foundRow}", $pdfData['wastes_location']);      // Wastes Location
-            $worksheet->setCellValue("F{$foundRow}", $pdfData['recycled_plastic']);     // Recycled Plastic
-            $worksheet->setCellValue("G{$foundRow}", $pdfData['recycled_paper']);       // Recycled Paper & CB
-            $worksheet->setCellValue("H{$foundRow}", $pdfData['recycled_wood']);        // Recycled Wood
-            $worksheet->setCellValue("I{$foundRow}", $pdfData['recycled_steel']);       // Recycled Steel
+            $worksheet->setCellValue("A{$foundRow}", $pdfData['manifest_number']);
+            $worksheet->setCellValue("B{$foundRow}", $pdfData['manifest_date']);
+            $worksheet->setCellValue("C{$foundRow}", $pdfData['waste_description']);
+            $worksheet->setCellValue("D{$foundRow}", $pdfData['quantity']);
+            $worksheet->setCellValue("E{$foundRow}", $pdfData['wastes_location']);
+            $worksheet->setCellValue("F{$foundRow}", $pdfData['recycled_plastic']);
+            $worksheet->setCellValue("G{$foundRow}", $pdfData['recycled_paper']);
+            $worksheet->setCellValue("H{$foundRow}", $pdfData['recycled_wood']);
+            $worksheet->setCellValue("I{$foundRow}", $pdfData['recycled_steel']);
 
             Log::info("Row {$foundRow} updated successfully");
 

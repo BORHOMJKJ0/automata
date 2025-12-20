@@ -646,13 +646,15 @@ class DropboxController extends Controller
             Log::info("Attempting to download: {$path}");
             Log::info("Using shared URL: {$sharedUrl}");
 
-            // For files within a shared folder, we need to use the regular files/download
-            // endpoint with the shared_link parameter, not the sharing/get_shared_link_file endpoint
+            // For shared links, use the Dropbox-API-Select-User header approach
+            // The shared_link must be in a separate header
             $response = Http::timeout(60)
                 ->withHeaders([
                     'Authorization' => 'Bearer '.$accessToken,
                     'Dropbox-API-Arg' => json_encode([
                         'path' => $path,
+                    ]),
+                    'Dropbox-API-Select-User' => json_encode([
                         'shared_link' => [
                             'url' => $sharedUrl,
                         ],
@@ -672,11 +674,46 @@ class DropboxController extends Controller
             Log::error('Response status: '.$response->status());
             Log::error('Response body: '.$response->body());
 
-            return null;
+            // If regular download fails, try the sharing endpoint as fallback
+            Log::info('Trying alternative sharing endpoint...');
+
+            return $this->downloadViaSharing($accessToken, $sharedUrl, $path);
 
         } catch (\Exception $e) {
             Log::error("Download exception for {$path}: ".$e->getMessage());
             Log::error('Stack trace: '.$e->getTraceAsString());
+
+            return null;
+        }
+    }
+
+    private function downloadViaSharing(string $accessToken, string $sharedUrl, string $path): ?string
+    {
+        try {
+            // Alternative method using sharing/get_shared_link_file
+            $response = Http::timeout(60)
+                ->withHeaders([
+                    'Authorization' => 'Bearer '.$accessToken,
+                    'Dropbox-API-Arg' => json_encode([
+                        'url' => $sharedUrl,
+                        'path' => $path,
+                    ]),
+                ])
+                ->withBody('', 'application/octet-stream')
+                ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
+
+            if ($response->successful()) {
+                Log::info('Successfully downloaded via sharing endpoint');
+
+                return $response->body();
+            }
+
+            Log::error('Sharing endpoint also failed: '.$response->body());
+
+            return null;
+
+        } catch (\Exception $e) {
+            Log::error('Sharing download failed: '.$e->getMessage());
 
             return null;
         }

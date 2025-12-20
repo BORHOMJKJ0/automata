@@ -646,22 +646,40 @@ class DropboxController extends Controller
             Log::info("Attempting to download: {$path}");
             Log::info("Using shared URL: {$sharedUrl}");
 
-            // For shared links, use the Dropbox-API-Select-User header approach
-            // The shared_link must be in a separate header
+            // Extract the relative path from the absolute path
+            // The path from list_folder includes the shared folder root,
+            // but we need just the relative path within the shared folder
+            $relativePath = $path;
+
+            // If path starts with /, remove it to make it relative
+            if (strpos($relativePath, '/') === 0) {
+                $relativePath = substr($relativePath, 1);
+            }
+
+            // Remove any parent folder structure that matches shared folder name
+            // For shared folders, we need the path relative to the shared folder root
+            $pathParts = explode('/', $relativePath);
+            if (count($pathParts) > 1) {
+                // Remove the first part (shared folder name)
+                array_shift($pathParts);
+                $relativePath = '/'.implode('/', $pathParts);
+            } else {
+                $relativePath = '/'.$relativePath;
+            }
+
+            Log::info("Using relative path: {$relativePath}");
+
+            // Use sharing/get_shared_link_file with the correct relative path
             $response = Http::timeout(60)
                 ->withHeaders([
                     'Authorization' => 'Bearer '.$accessToken,
                     'Dropbox-API-Arg' => json_encode([
-                        'path' => $path,
-                    ]),
-                    'Dropbox-API-Select-User' => json_encode([
-                        'shared_link' => [
-                            'url' => $sharedUrl,
-                        ],
+                        'url' => $sharedUrl,
+                        'path' => $relativePath,
                     ]),
                 ])
                 ->withBody('', 'application/octet-stream')
-                ->post('https://content.dropboxapi.com/2/files/download');
+                ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
 
             if ($response->successful()) {
                 $size = strlen($response->body());
@@ -674,46 +692,11 @@ class DropboxController extends Controller
             Log::error('Response status: '.$response->status());
             Log::error('Response body: '.$response->body());
 
-            // If regular download fails, try the sharing endpoint as fallback
-            Log::info('Trying alternative sharing endpoint...');
-
-            return $this->downloadViaSharing($accessToken, $sharedUrl, $path);
+            return null;
 
         } catch (\Exception $e) {
             Log::error("Download exception for {$path}: ".$e->getMessage());
             Log::error('Stack trace: '.$e->getTraceAsString());
-
-            return null;
-        }
-    }
-
-    private function downloadViaSharing(string $accessToken, string $sharedUrl, string $path): ?string
-    {
-        try {
-            // Alternative method using sharing/get_shared_link_file
-            $response = Http::timeout(60)
-                ->withHeaders([
-                    'Authorization' => 'Bearer '.$accessToken,
-                    'Dropbox-API-Arg' => json_encode([
-                        'url' => $sharedUrl,
-                        'path' => $path,
-                    ]),
-                ])
-                ->withBody('', 'application/octet-stream')
-                ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
-
-            if ($response->successful()) {
-                Log::info('Successfully downloaded via sharing endpoint');
-
-                return $response->body();
-            }
-
-            Log::error('Sharing endpoint also failed: '.$response->body());
-
-            return null;
-
-        } catch (\Exception $e) {
-            Log::error('Sharing download failed: '.$e->getMessage());
 
             return null;
         }

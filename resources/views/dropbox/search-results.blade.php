@@ -12,18 +12,6 @@
         margin-bottom: 2rem;
     }
 
-    .search-input {
-        border: 2px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 0.75rem 1rem;
-        transition: all 0.3s ease;
-    }
-
-    .search-input:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
-    }
-
     .results-section {
         margin-bottom: 2rem;
     }
@@ -119,7 +107,6 @@
         font-size: 0.9rem;
     }
 
-    /* Loading Overlay */
     .loading-overlay {
         display: none;
         position: fixed;
@@ -178,6 +165,58 @@
         margin-top: 0.5rem;
     }
 
+    .excel-section {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+    }
+
+    .excel-file-card {
+        background: white;
+        color: #333;
+        padding: 1rem;
+        border-radius: 10px;
+        margin-top: 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .excel-file-card:hover {
+        transform: translateX(-5px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+
+    .excel-file-card.selected {
+        border: 3px solid #28a745;
+        background: #e8f5e9;
+    }
+
+    .process-excel-btn {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(17, 153, 142, 0.3);
+        width: 100%;
+    }
+
+    .process-excel-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(17, 153, 142, 0.4);
+        color: white;
+    }
+
+    .process-excel-btn:disabled {
+        background: #cccccc;
+        cursor: not-allowed;
+    }
+
     @media (max-width: 768px) {
         .stat-item {
             display: block;
@@ -226,7 +265,7 @@
             <div class="help-text mb-3">
                 <strong><i class="bi bi-info-circle me-2"></i>كيفية الاستخدام:</strong>
                 <ul class="mb-2 mt-2">
-                    <li>البحث يتم في جميع الملفات النصية بشكل تكراري</li>
+                    <li>البحث يتم في جميع ملفات PDF والملفات النصية بشكل تكراري</li>
                     <li>يمكنك البحث بحقل واحد أو حقلين معاً</li>
                     <li>البحث غير حساس لحالة الأحرف (Case-insensitive)</li>
                     <li>يدعم البحث الجزئي (Partial matching)</li>
@@ -247,10 +286,11 @@
                                name="producer_name" 
                                class="form-control search-input"
                                value="{{ $producerName ?? '' }}"
-                               placeholder="Enter producer name">
+                               placeholder="Enter producer name"
+                               style="border: 2px solid #e0e0e0; border-radius: 10px; padding: 0.75rem 1rem;">
                         <small class="text-muted">يبحث عن: "Producer Name : your_value"</small>
                         <div class="example-box">
-                            مثال: Abu Dhabi Waste Management
+                            مثال: ITALIAN JOB GENERAL CONTRACTING
                         </div>
                     </div>
                     
@@ -262,10 +302,11 @@
                                name="wastes_location" 
                                class="form-control search-input"
                                value="{{ $wastesLocation ?? '' }}"
-                               placeholder="Enter wastes location">
+                               placeholder="Enter wastes location"
+                               style="border: 2px solid #e0e0e0; border-radius: 10px; padding: 0.75rem 1rem;">
                         <small class="text-muted">يبحث عن: "Wastes Location : your_value"</small>
                         <div class="example-box">
-                            مثال: Dubai Industrial City
+                            مثال: KHALIFA CITY
                         </div>
                     </div>
                 </div>
@@ -276,11 +317,52 @@
                     </button>
                     <a href="{{ route('dropbox.browse.shared.folder') }}?shared_url={{ urlencode($sharedUrl ?? '') }}&path={{ urlencode($currentPath ?? '') }}" 
                        class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-right me-2"></i>الرجوع الى الملفات
+                        <i class="bi bi-arrow-right me-2"></i>الرجوع إلى الملفات
                     </a>
                 </div>
             </form>
         </div>
+
+        {{-- قسم معالجة Excel --}}
+        @if(isset($matchingFiles) && count($matchingFiles) > 0 && isset($allExcelFiles) && count($allExcelFiles) > 0)
+        <div class="excel-section">
+            <h4 class="mb-3">
+                <i class="bi bi-file-earmark-spreadsheet me-2"></i>معالجة وتحديث Excel
+            </h4>
+            <p class="mb-3">تم العثور على {{ count($matchingFiles) }} ملف PDF مطابق. اختر ملف Excel لتحديثه:</p>
+            
+            <form method="POST" action="{{ route('dropbox.process.excel') }}" id="excelForm">
+                @csrf
+                <input type="hidden" name="shared_url" value="{{ $sharedUrl }}">
+                <input type="hidden" name="matching_files" value="{{ json_encode($matchingFiles) }}" id="matchingFilesInput">
+                <input type="hidden" name="excel_file" id="selectedExcelFile">
+                
+                <div class="mb-3">
+                    @foreach($allExcelFiles as $excel)
+                    <div class="excel-file-card" onclick="selectExcelFile('{{ $excel['path'] }}', this)">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">
+                                    <i class="bi bi-file-earmark-excel text-success me-2"></i>
+                                    {{ $excel['name'] }}
+                                </h6>
+                                <small class="text-muted">{{ $excel['path'] }}</small>
+                                <div class="mt-1">
+                                    <span class="badge bg-secondary">{{ number_format($excel['size'] / 1024, 2) }} KB</span>
+                                </div>
+                            </div>
+                            <i class="bi bi-check-circle-fill text-success" style="font-size: 1.5rem; display: none;"></i>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+
+                <button type="submit" class="process-excel-btn" id="processBtn" disabled>
+                    <i class="bi bi-gear-fill me-2"></i>معالجة وتحديث Excel ({{ count($matchingFiles) }} ملف PDF)
+                </button>
+            </form>
+        </div>
+        @endif
 
         {{-- الملفات المطابقة --}}
         @if(isset($matchingFiles) && count($matchingFiles) > 0)
@@ -295,11 +377,17 @@
                 <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap">
                     <div class="mb-2 mb-md-0 flex-grow-1">
                         <h6 class="mb-1">
-                            <i class="bi bi-file-text me-2"></i>{{ $file['name'] }}
+                            @if($file['type'] === 'pdf')
+                                <i class="bi bi-file-pdf text-danger me-2"></i>
+                            @else
+                                <i class="bi bi-file-text me-2"></i>
+                            @endif
+                            {{ $file['name'] }}
                         </h6>
                         <small class="text-muted">{{ $file['path'] }}</small>
                         <div class="mt-1">
                             <span class="badge bg-secondary">{{ number_format($file['size'] / 1024, 2) }} KB</span>
+                            <span class="badge bg-info ms-1">{{ strtoupper($file['type']) }}</span>
                         </div>
                     </div>
                     <span class="status-badge badge-match">
@@ -332,10 +420,12 @@
                 </div>
 
                 <div class="mt-3 d-flex gap-2 flex-wrap">
+                    @if($file['type'] !== 'pdf')
                     <a href="{{ route('dropbox.shared.preview') }}?shared_url={{ urlencode($sharedUrl) }}&path={{ urlencode($file['path']) }}" 
                        class="btn btn-sm btn-outline-info">
                         <i class="bi bi-eye me-1"></i>معاينة
                     </a>
+                    @endif
                     <form method="POST" action="{{ route('dropbox.shared.download') }}" class="d-inline">
                         @csrf
                         <input type="hidden" name="shared_url" value="{{ $sharedUrl }}">
@@ -363,11 +453,17 @@
                 <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap">
                     <div class="mb-2 mb-md-0 flex-grow-1">
                         <h6 class="mb-1">
-                            <i class="bi bi-file-text me-2"></i>{{ $file['name'] }}
+                            @if($file['type'] === 'pdf')
+                                <i class="bi bi-file-pdf text-danger me-2"></i>
+                            @else
+                                <i class="bi bi-file-text me-2"></i>
+                            @endif
+                            {{ $file['name'] }}
                         </h6>
                         <small class="text-muted">{{ $file['path'] }}</small>
                         <div class="mt-1">
                             <span class="badge bg-secondary">{{ number_format($file['size'] / 1024, 2) }} KB</span>
+                            <span class="badge bg-info ms-1">{{ strtoupper($file['type']) }}</span>
                         </div>
                     </div>
                     <span class="status-badge badge-no-match">
@@ -415,10 +511,12 @@
                 </div>
 
                 <div class="mt-3 d-flex gap-2 flex-wrap">
+                    @if($file['type'] !== 'pdf')
                     <a href="{{ route('dropbox.shared.preview') }}?shared_url={{ urlencode($sharedUrl) }}&path={{ urlencode($file['path']) }}" 
                        class="btn btn-sm btn-outline-info">
                         <i class="bi bi-eye me-1"></i>معاينة
                     </a>
+                    @endif
                     <form method="POST" action="{{ route('dropbox.shared.download') }}" class="d-inline">
                         @csrf
                         <input type="hidden" name="shared_url" value="{{ $sharedUrl }}">
@@ -442,12 +540,12 @@
         </div>
         @endif
 
-        {{-- رسالة عند عدم وجود ملفات نصية --}}
+        {{-- رسالة عند عدم وجود ملفات --}}
         @if(isset($totalFiles) && $totalFiles === 0 && isset($matchingFiles))
         <div class="alert alert-warning">
             <i class="bi bi-exclamation-triangle me-2"></i>
-            <strong>لم يتم العثور على ملفات نصية قابلة للبحث في المجلد المحدد.</strong>
-            <p class="mb-0 mt-2">تأكد من وجود ملفات نصية (.txt, .log, .md, إلخ) في المجلد.</p>
+            <strong>لم يتم العثور على ملفات قابلة للبحث في المجلد المحدد.</strong>
+            <p class="mb-0 mt-2">تأكد من وجود ملفات PDF أو ملفات نصية في المجلد.</p>
         </div>
         @endif
     </div>
@@ -456,8 +554,9 @@
 
 @push('scripts')
 <script>
+    let selectedExcelPath = null;
+
     document.getElementById('searchForm').addEventListener('submit', function(e) {
-        // التحقق من وجود قيمة واحدة على الأقل
         const producerName = document.querySelector('input[name="producer_name"]').value.trim();
         const wastesLocation = document.querySelector('input[name="wastes_location"]').value.trim();
         
@@ -467,8 +566,40 @@
             return false;
         }
         
-        // إظهار شاشة التحميل
         document.getElementById('loadingOverlay').classList.add('show');
+    });
+
+    function selectExcelFile(path, element) {
+        // Remove selection from all cards
+        document.querySelectorAll('.excel-file-card').forEach(card => {
+            card.classList.remove('selected');
+            card.querySelector('.bi-check-circle-fill').style.display = 'none';
+        });
+
+        // Select clicked card
+        element.classList.add('selected');
+        element.querySelector('.bi-check-circle-fill').style.display = 'block';
+        
+        selectedExcelPath = path;
+        document.getElementById('selectedExcelFile').value = path;
+        document.getElementById('processBtn').disabled = false;
+    }
+
+    document.getElementById('excelForm')?.addEventListener('submit', function(e) {
+        if (!selectedExcelPath) {
+            e.preventDefault();
+            alert('الرجاء اختيار ملف Excel');
+            return false;
+        }
+
+        if (!confirm(`هل أنت متأكد من معالجة ${document.querySelectorAll('.matching-card').length} ملف PDF وتحديث Excel؟`)) {
+            e.preventDefault();
+            return false;
+        }
+
+        document.getElementById('loadingOverlay').classList.add('show');
+        document.querySelector('.loading-content h5').textContent = 'جاري معالجة ملفات PDF وتحديث Excel...';
+        document.querySelector('.loading-content p').textContent = 'قد يستغرق هذا عدة دقائق حسب عدد الملفات';
     });
 </script>
 @endpush

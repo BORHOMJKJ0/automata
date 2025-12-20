@@ -658,6 +658,7 @@ class DropboxController extends Controller
                         ],
                     ]),
                 ])
+                ->withBody('', 'application/octet-stream')
                 ->post('https://content.dropboxapi.com/2/files/download');
 
             if ($response->successful()) {

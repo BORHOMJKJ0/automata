@@ -776,9 +776,58 @@ class DropboxController extends Controller
 
     private function extractValue(string $content, string $fieldName): string
     {
-        // Remove BOM
+        // Remove BOM and normalize whitespace
         $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
+        $content = preg_replace('/\r\n/', "\n", $content); // Normalize line endings
 
+        // Special handling for Producer Name - it can span multiple lines
+        if ($fieldName === 'Producer Name') {
+            // Pattern 1: Producer Name : followed by text on next lines
+            if (preg_match('/Producer\s+Name\s*:\s*\n\s*([^\n]+(?:\n[^\n:]+)*?)(?=\n\s*(?:Wastes Location|Trade License|Mobile|Email|Company Name|Part \d+|$))/is', $content, $matches)) {
+                $value = trim($matches[1]);
+                // Clean up multiple lines into single line
+                $value = preg_replace('/\s+/', ' ', $value);
+                if (! empty($value)) {
+                    return $value;
+                }
+            }
+
+            // Pattern 2: Producer Name with value on same line
+            if (preg_match('/Producer\s+Name\s*:\s*([^\n]+)/i', $content, $matches)) {
+                $value = trim($matches[1]);
+                if (! empty($value)) {
+                    return $value;
+                }
+            }
+        }
+
+        // Special handling for Wastes Location
+        if ($fieldName === 'Wastes Location') {
+            // Pattern 1: Wastes Location : followed by text
+            if (preg_match('/Wastes?\s+Location\s*:\s*\n?\s*([^\n]+)/is', $content, $matches)) {
+                $value = trim($matches[1]);
+                $value = preg_replace('/\s+/', ' ', $value);
+                if (! empty($value)) {
+                    return $value;
+                }
+            }
+        }
+
+        // Special handling for Manifest Number
+        if ($fieldName === 'Manifest Number') {
+            if (preg_match('/Manifest\s+Number\s*:\s*([0-9]+)/i', $content, $matches)) {
+                return trim($matches[1]);
+            }
+        }
+
+        // Special handling for Manifest Date
+        if ($fieldName === 'Manifest Date') {
+            if (preg_match('/Manifest\s+Date\s*:\s*([0-9\/\-]+)/i', $content, $matches)) {
+                return trim($matches[1]);
+            }
+        }
+
+        // Generic patterns for other fields
         $patterns = [
             // Pattern 1: Field: Value (same line)
             '/'.preg_quote($fieldName, '/').'\s*:\s*([^\n]+)/i',
@@ -786,13 +835,14 @@ class DropboxController extends Controller
             // Pattern 2: Field: \n Value
             '/'.preg_quote($fieldName, '/').'\s*:\s*\n\s*([^\n]+)/i',
 
-            // Pattern 3: Multi-line value
+            // Pattern 3: Multi-line value (stop at next field or Part)
             '/'.preg_quote($fieldName, '/').'\s*:\s*\n?(.*?)(?=\n(?:[A-Z][a-zA-Z\s]+\s*:|Part \d+|Manifest|Trade License|Mobile No\.|Email|Company Name|Driver Name|License Plate|Phone No\.|Facility|City|Street Name|Waste Description|Collection Point)|$)/is',
         ];
 
         foreach ($patterns as $pattern) {
             if (preg_match($pattern, $content, $matches)) {
                 $value = trim($matches[1]);
+                // Clean up whitespace
                 $value = preg_replace('/\s+/', ' ', $value);
                 $value = trim($value);
 

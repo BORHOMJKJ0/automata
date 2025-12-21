@@ -551,6 +551,168 @@ class DropboxController extends Controller
         }
     }
 
+    private function extractWasteFromPart3(string $text): string
+    {
+        // Try to find Part 3 section
+        if (preg_match('/Part 3.*?Waste Description\s+Physical State\s+Quantity.*?\n\s*([^\n]+)/is', $text, $matches)) {
+            return trim($matches[1]);
+        }
+
+        // Alternative pattern
+        if (preg_match('/Part 3.*?Storage.*?Waste Description.*?\n\s*([^\n]+)/is', $text, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return 'Not Found';
+    }
+
+    private function extractQuantityFromPart3(string $text): int
+    {
+        // Try to find quantity in Part 3
+        if (preg_match('/Part 3.*?Waste Description\s+Physical State\s+Quantity.*?\n[^\d]*(\d+)/is', $text, $matches)) {
+            return (int) $matches[1];
+        }
+
+        // Alternative: find Solid followed by number
+        if (preg_match('/Part 3.*?Solid\s+(\d+)/is', $text, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return 0;
+    }
+
+    private function updateExcelRow($worksheet, array $pdfData): bool
+    {
+        try {
+            $highestRow = $worksheet->getHighestRow();
+            $manifestNumber = trim($pdfData['manifest_number']);
+            $foundRow = null;
+
+            // Search for existing Manifest Number (Column A)
+            for ($row = 2; $row <= $highestRow; $row++) {
+                $cellValue = trim((string) $worksheet->getCell("A{$row}")->getValue());
+
+                if ($cellValue == $manifestNumber) {
+                    $foundRow = $row;
+                    Log::info("Found existing row {$row} for manifest {$manifestNumber}");
+                    break;
+                }
+            }
+
+            // Create new row if not found
+            if (! $foundRow) {
+                $foundRow = $highestRow + 1;
+                Log::info("Creating new row {$foundRow} for manifest {$manifestNumber}");
+            }
+
+            // Update Excel cells
+            $worksheet->setCellValue("A{$foundRow}", $pdfData['manifest_number']);
+            $worksheet->setCellValue("B{$foundRow}", $pdfData['manifest_date']);
+            $worksheet->setCellValue("C{$foundRow}", $pdfData['waste_description']);
+            $worksheet->setCellValue("D{$foundRow}", $pdfData['quantity']);
+            $worksheet->setCellValue("E{$foundRow}", $pdfData['wastes_location']);
+            $worksheet->setCellValue("F{$foundRow}", $pdfData['recycled_plastic']);
+            $worksheet->setCellValue("G{$foundRow}", $pdfData['recycled_paper']);
+            $worksheet->setCellValue("H{$foundRow}", $pdfData['recycled_wood']);
+            $worksheet->setCellValue("I{$foundRow}", $pdfData['recycled_steel']);
+
+            Log::info("Row {$foundRow} updated successfully");
+
+            return true;
+
+        } catch (\Exception $e) {
+            Log::error('Excel Update Error: '.$e->getMessage());
+
+            return false;
+        }
+    }
+
+    private function uploadToDropbox(string $accessToken, string $path, string $content): bool
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$accessToken,
+                'Content-Type' => 'application/octet-stream',
+                'Dropbox-API-Arg' => json_encode([
+                    'path' => $path,
+                    'mode' => 'add',
+                    'autorename' => true,
+                    'mute' => false,
+                ]),
+            ])->withBody($content)->post('https://content.dropboxapi.com/2/files/upload');
+
+            if ($response->successful()) {
+                Log::info("File uploaded successfully: {$path}");
+
+                return true;
+            }
+
+            Log::error('Upload failed: '.$response->body());
+
+            return false;
+
+        } catch (\Exception $e) {
+            Log::error('Upload Error: '.$e->getMessage());
+
+            return false;
+        }
+    }
+
+    private function organizeItems(array $entries): array
+    {
+        $items = ['folders' => [], 'files' => []];
+
+        foreach ($entries as $entry) {
+            $path = $entry['path_display'] ?? $entry['path_lower'] ?? null;
+
+            if (! $path) {
+                Log::warning('Entry without path: '.json_encode($entry));
+
+                continue;
+            }
+
+            if ($entry['.tag'] === 'folder') {
+                $items['folders'][] = [
+                    'name' => $entry['name'] ?? basename($path),
+                    'path' => $path,
+                ];
+            } elseif ($entry['.tag'] === 'file') {
+                $fileName = $entry['name'] ?? basename($path);
+                $extension = pathinfo($fileName, PATHINFO_EXTENSION);
+
+                $items['files'][] = [
+                    'name' => $fileName,
+                    'path' => $path,
+                    'size' => $entry['size'] ?? 0,
+                    'modified' => $entry['server_modified'] ?? null,
+                    'extension' => strtolower($extension),
+                    'is_editable' => $this->isEditable($extension),
+                    'is_previewable' => $this->isPreviewable($extension),
+                ];
+            }
+        }
+
+        return $items;
+    }
+
+    private function isEditable(string $extension): bool
+    {
+        $editable = ['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'php', 'py', 'java'];
+
+        return in_array(strtolower($extension), $editable);
+    }
+
+    private function isPreviewable(string $extension): bool
+    {
+        $previewable = [
+            'txt', 'md', 'json', 'xml', 'html', 'css', 'js',
+            'php', 'py', 'java', 'c', 'cpp', 'h', 'yml', 'yaml',
+            'ini', 'conf', 'log', 'sql', 'sh', 'bat',
+        ];
+
+        return in_array(strtolower($extension), $previewable);
+    }
+
     private function listFolderContents(string $accessToken, string $sharedUrl, string $path): array
     {
         try {

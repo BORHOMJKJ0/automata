@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\BitrixNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -18,12 +19,16 @@ class DropboxController extends Controller
 
     private string $redirectUri;
 
+    private BitrixNotificationService $bitrixService;
+
     public function __construct()
     {
         $this->clientId = env('DROPBOX_CLIENT_ID');
         $this->clientSecret = env('DROPBOX_CLIENT_SECRET');
         $this->redirectUri = env('DROPBOX_REDIRECT_URI', url('/dropbox/callback'));
         $this->middleware('web');
+        $this->bitrixService = new BitrixNotificationService;
+
     }
 
     // ==================== AUTHENTICATION ====================
@@ -112,7 +117,6 @@ class DropboxController extends Controller
         Session::put('current_shared_url', $sharedUrl);
 
         try {
-            // Get metadata
             $metadata = $this->getSharedLinkMetadata($accessToken, $sharedUrl);
 
             if (! $metadata || $metadata['.tag'] !== 'folder') {
@@ -120,7 +124,6 @@ class DropboxController extends Controller
                     ->with('error', 'الرابط يجب أن يكون لمجلد وليس لملف');
             }
 
-            // List folder contents
             $items = $this->listFolderContents($accessToken, $sharedUrl, '');
 
             return view('dropbox.browse', [
@@ -240,7 +243,7 @@ class DropboxController extends Controller
                 return back()->with('error', 'فشل قراءة الملف');
             }
 
-            if (strlen($content) > 1048576) { // 1MB
+            if (strlen($content) > 1048576) {
                 return back()->with('error', 'الملف كبير جداً للمعاينة (أكثر من 1MB)');
             }
 
@@ -272,7 +275,6 @@ class DropboxController extends Controller
             return back()->with('error', 'يجب تسجيل الدخول أولاً');
         }
 
-        // GET request - show empty form
         if ($request->isMethod('get')) {
             return view('dropbox.search-results', [
                 'producerName' => '',
@@ -286,7 +288,6 @@ class DropboxController extends Controller
             ]);
         }
 
-        // POST request - perform search
         $producerName = trim($request->input('producer_name', ''));
         $wastesLocation = trim($request->input('wastes_location', ''));
         $sharedUrl = $request->input('shared_url') ?? Session::get('current_shared_url');
@@ -306,18 +307,15 @@ class DropboxController extends Controller
             Log::info("Current Path: {$currentPath}");
             Log::info("Producer: {$producerName}, Location: {$wastesLocation}");
 
-            // Get all files recursively - ensure $currentPath is string
             $allEntries = $this->getAllFilesRecursive($accessToken, $sharedUrl, $currentPath);
             Log::info('Total entries found: '.count($allEntries));
 
-            // Debug: Log first few entries
             if (count($allEntries) > 0) {
                 Log::info('Sample entries: '.json_encode(array_slice($allEntries, 0, 3)));
             } else {
                 Log::warning('No entries found! This might be a problem.');
             }
 
-            // Categorize files
             $pdfFiles = [];
             $excelFiles = [];
             $textFiles = [];
@@ -353,11 +351,9 @@ class DropboxController extends Controller
 
             Log::info('Files found - PDFs: '.count($pdfFiles).', Excel: '.count($excelFiles).', Text: '.count($textFiles));
 
-            // Process files
             $matchingFiles = [];
             $nonMatchingFiles = [];
 
-            // Process PDFs
             foreach ($pdfFiles as $file) {
                 $result = $this->processFile($accessToken, $sharedUrl, $file, $producerName, $wastesLocation, 'pdf');
                 if ($result['matches']) {
@@ -367,7 +363,6 @@ class DropboxController extends Controller
                 }
             }
 
-            // Process text files
             foreach ($textFiles as $file) {
                 $result = $this->processFile($accessToken, $sharedUrl, $file, $producerName, $wastesLocation, 'text');
                 if ($result['matches']) {
@@ -378,6 +373,15 @@ class DropboxController extends Controller
             }
 
             Log::info('Results - Matching: '.count($matchingFiles).', Non-matching: '.count($nonMatchingFiles));
+
+            if (count($matchingFiles) > 0) {
+                $criteria = "Producer: {$producerName}, Location: {$wastesLocation}";
+                $this->bitrixService->notifySearchResults(
+                    count($matchingFiles),
+                    count($pdfFiles) + count($textFiles),
+                    $criteria
+                );
+            }
 
             return view('dropbox.search-results', [
                 'producerName' => $producerName,
@@ -402,7 +406,7 @@ class DropboxController extends Controller
 
     public function processExcelUpdate(Request $request)
     {
-        set_time_limit(600); // 10 minutes
+        set_time_limit(600);
         ini_set('memory_limit', '512M');
 
         $accessToken = Session::get('dropbox_access_token');
@@ -424,24 +428,20 @@ class DropboxController extends Controller
             Log::info("Excel file: {$excelPath}");
             Log::info('Files to process: '.count($matchingFiles));
 
-            // Download Excel
             $excelContent = $this->downloadFileContent($accessToken, $sharedUrl, $excelPath);
             if (! $excelContent) {
                 return back()->with('error', 'فشل تحميل ملف Excel');
             }
 
-            // Save temporarily
             $tempExcelPath = tempnam(sys_get_temp_dir(), 'excel_').'.xlsx';
             file_put_contents($tempExcelPath, $excelContent);
 
-            // Load Excel
             $spreadsheet = IOFactory::load($tempExcelPath);
             $worksheet = $spreadsheet->getActiveSheet();
 
             $updatedCount = 0;
             $processedFiles = [];
 
-            // Process each PDF
             foreach ($matchingFiles as $file) {
                 if (! str_ends_with(strtolower($file['name']), '.pdf')) {
                     continue;
@@ -483,14 +483,12 @@ class DropboxController extends Controller
                 }
             }
 
-            // Save Excel
             $writer = new Xlsx($spreadsheet);
             $writer->save($tempExcelPath);
 
             $updatedContent = file_get_contents($tempExcelPath);
             unlink($tempExcelPath);
 
-            // Upload to Dropbox
             $fileName = 'Updated_'.date('Ymd_His').'_'.basename($excelPath);
             $newExcelPath = dirname($excelPath).'/'.$fileName;
 
@@ -499,6 +497,12 @@ class DropboxController extends Controller
             if ($uploaded) {
                 Log::info('=== Excel Update Complete ===');
                 Log::info("Updated {$updatedCount} files");
+
+                $this->bitrixService->notifyExcelProcessed(
+                    count($matchingFiles),
+                    $updatedCount,
+                    $excelPath
+                );
 
                 return view('dropbox.process-results', [
                     'success' => true,
@@ -553,12 +557,10 @@ class DropboxController extends Controller
 
     private function extractWasteFromPart3(string $text): string
     {
-        // Try to find Part 3 section
         if (preg_match('/Part 3.*?Waste Description\s+Physical State\s+Quantity.*?\n\s*([^\n]+)/is', $text, $matches)) {
             return trim($matches[1]);
         }
 
-        // Alternative pattern
         if (preg_match('/Part 3.*?Storage.*?Waste Description.*?\n\s*([^\n]+)/is', $text, $matches)) {
             return trim($matches[1]);
         }
@@ -568,12 +570,10 @@ class DropboxController extends Controller
 
     private function extractQuantityFromPart3(string $text): int
     {
-        // Try to find quantity in Part 3
         if (preg_match('/Part 3.*?Waste Description\s+Physical State\s+Quantity.*?\n[^\d]*(\d+)/is', $text, $matches)) {
             return (int) $matches[1];
         }
 
-        // Alternative: find Solid followed by number
         if (preg_match('/Part 3.*?Solid\s+(\d+)/is', $text, $matches)) {
             return (int) $matches[1];
         }
@@ -588,7 +588,6 @@ class DropboxController extends Controller
             $manifestNumber = trim($pdfData['manifest_number']);
             $foundRow = null;
 
-            // Search for existing Manifest Number (Column A)
             for ($row = 2; $row <= $highestRow; $row++) {
                 $cellValue = trim((string) $worksheet->getCell("A{$row}")->getValue());
 
@@ -599,13 +598,11 @@ class DropboxController extends Controller
                 }
             }
 
-            // Create new row if not found
             if (! $foundRow) {
                 $foundRow = $highestRow + 1;
                 Log::info("Creating new row {$foundRow} for manifest {$manifestNumber}");
             }
 
-            // Update Excel cells
             $worksheet->setCellValue("A{$foundRow}", $pdfData['manifest_number']);
             $worksheet->setCellValue("B{$foundRow}", $pdfData['manifest_date']);
             $worksheet->setCellValue("C{$foundRow}", $pdfData['waste_description']);
@@ -645,6 +642,12 @@ class DropboxController extends Controller
             if ($response->successful()) {
                 Log::info("File uploaded successfully: {$path}");
 
+                $this->bitrixService->notifyFileUploaded(
+                    basename($path),
+                    $path,
+                    []
+                );
+
                 return true;
             }
 
@@ -653,9 +656,11 @@ class DropboxController extends Controller
             return false;
 
         } catch (\Exception $e) {
-            Log::error('Upload Error: '.$e->getMessage());
+            Log::error('Process Excel Error: '.$e->getMessage());
 
-            return false;
+            $this->bitrixService->notifyError('Excel Processing', $e->getMessage());
+
+            return back()->with('error', 'خطأ: '.$e->getMessage());
         }
     }
 
@@ -743,7 +748,6 @@ class DropboxController extends Controller
     {
         $allEntries = [];
 
-        // Ensure path is string, not null
         $path = $path ?? '';
 
         try {
@@ -761,7 +765,7 @@ class DropboxController extends Controller
                 ])->post('https://api.dropboxapi.com/2/files/list_folder', [
                     'path' => $path,
                     'shared_link' => ['url' => $sharedUrl],
-                    'recursive' => false, // Changed to false for shared links
+                    'recursive' => false,
                     'limit' => 2000,
                 ]);
             }
@@ -775,7 +779,6 @@ class DropboxController extends Controller
                 foreach ($entries as $entry) {
                     $allEntries[] = $entry;
 
-                    // If it's a folder, recursively get its contents
                     if ($entry['.tag'] === 'folder') {
                         $folderPath = $entry['path_display'] ?? $entry['path_lower'];
                         if ($folderPath) {
@@ -786,7 +789,6 @@ class DropboxController extends Controller
                     }
                 }
 
-                // Handle pagination
                 if (($data['has_more'] ?? false) && isset($data['cursor'])) {
                     $moreEntries = $this->getAllFilesRecursive($accessToken, $sharedUrl, $path, $data['cursor']);
                     $allEntries = array_merge($allEntries, $moreEntries);
@@ -809,18 +811,14 @@ class DropboxController extends Controller
             Log::info("Attempting to download: {$path}");
             Log::info("Using shared URL: {$sharedUrl}");
 
-            // Extract the relative path from the absolute path
             $relativePath = $path;
 
-            // If path starts with /, remove it to make it relative
             if (strpos($relativePath, '/') === 0) {
                 $relativePath = substr($relativePath, 1);
             }
 
-            // Remove any parent folder structure that matches shared folder name
             $pathParts = explode('/', $relativePath);
             if (count($pathParts) > 1) {
-                // Remove the first part (shared folder name)
                 array_shift($pathParts);
                 $relativePath = '/'.implode('/', $pathParts);
             } else {
@@ -829,7 +827,6 @@ class DropboxController extends Controller
 
             Log::info("Using relative path: {$relativePath}");
 
-            // Use sharing/get_shared_link_file with the correct relative path
             $response = Http::timeout(60)
                 ->withHeaders([
                     'Authorization' => 'Bearer '.$accessToken,
@@ -880,11 +877,9 @@ class DropboxController extends Controller
             ];
         }
 
-        // DEBUG: Log content length
         Log::info("Processing {$file['name']}, content length: ".strlen($content));
 
         if ($type === 'pdf') {
-            // For PDF, parse it first
             $tempPdfPath = tempnam(sys_get_temp_dir(), 'pdf_').'.pdf';
             file_put_contents($tempPdfPath, $content);
 
@@ -964,17 +959,14 @@ class DropboxController extends Controller
         $extractedLower = mb_strtolower(trim($extractedValue), 'UTF-8');
         $searchLower = mb_strtolower(trim($searchValue), 'UTF-8');
 
-        // Partial match
         return strpos($extractedLower, $searchLower) !== false;
     }
 
     private function extractValue(string $content, string $fieldName): string
     {
-        // Remove BOM and normalize whitespace
         $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
-        $content = preg_replace('/\r\n/', "\n", $content); // Normalize line endings
+        $content = preg_replace('/\r\n/', "\n", $content);
 
-        // Debug: Log a snippet of content around the field we're looking for
         if (stripos($content, $fieldName) !== false) {
             $pos = stripos($content, $fieldName);
             $snippet = substr($content, max(0, $pos - 50), 200);
@@ -983,12 +975,9 @@ class DropboxController extends Controller
             Log::warning("Field '{$fieldName}' not found in content at all!");
         }
 
-        // Special handling for Producer Name - it can span multiple lines
         if ($fieldName === 'Producer Name') {
-            // Pattern 1: Producer Name : followed by text on next lines
             if (preg_match('/Producer\s+Name\s*:\s*\n\s*([^\n]+(?:\n[^\n:]+)*?)(?=\n\s*(?:Wastes Location|Trade License|Mobile|Email|Company Name|Part \d+|$))/is', $content, $matches)) {
                 $value = trim($matches[1]);
-                // Clean up multiple lines into single line
                 $value = preg_replace('/\s+/', ' ', $value);
                 if (! empty($value)) {
                     Log::info("Extracted Producer Name: '{$value}'");
@@ -997,7 +986,6 @@ class DropboxController extends Controller
                 }
             }
 
-            // Pattern 2: Producer Name with value on same line
             if (preg_match('/Producer\s+Name\s*:\s*([^\n]+)/i', $content, $matches)) {
                 $value = trim($matches[1]);
                 if (! empty($value)) {
@@ -1008,9 +996,7 @@ class DropboxController extends Controller
             }
         }
 
-        // Special handling for Wastes Location
         if ($fieldName === 'Wastes Location') {
-            // Pattern 1: Wastes Location : followed by text
             if (preg_match('/Wastes?\s+Location\s*:\s*\n?\s*([^\n]+)/is', $content, $matches)) {
                 $value = trim($matches[1]);
                 $value = preg_replace('/\s+/', ' ', $value);
@@ -1022,36 +1008,29 @@ class DropboxController extends Controller
             }
         }
 
-        // Special handling for Manifest Number
         if ($fieldName === 'Manifest Number') {
             if (preg_match('/Manifest\s+Number\s*:\s*([0-9]+)/i', $content, $matches)) {
                 return trim($matches[1]);
             }
         }
 
-        // Special handling for Manifest Date
         if ($fieldName === 'Manifest Date') {
             if (preg_match('/Manifest\s+Date\s*:\s*([0-9\/\-]+)/i', $content, $matches)) {
                 return trim($matches[1]);
             }
         }
 
-        // Generic patterns for other fields
         $patterns = [
-            // Pattern 1: Field: Value (same line)
             '/'.preg_quote($fieldName, '/').'\s*:\s*([^\n]+)/i',
 
-            // Pattern 2: Field: \n Value
             '/'.preg_quote($fieldName, '/').'\s*:\s*\n\s*([^\n]+)/i',
 
-            // Pattern 3: Multi-line value (stop at next field or Part)
             '/'.preg_quote($fieldName, '/').'\s*:\s*\n?(.*?)(?=\n(?:[A-Z][a-zA-Z\s]+\s*:|Part \d+|Manifest|Trade License|Mobile No\.|Email|Company Name|Driver Name|License Plate|Phone No\.|Facility|City|Street Name|Waste Description|Collection Point)|$)/is',
         ];
 
         foreach ($patterns as $pattern) {
             if (preg_match($pattern, $content, $matches)) {
                 $value = trim($matches[1]);
-                // Clean up whitespace
                 $value = preg_replace('/\s+/', ' ', $value);
                 $value = trim($value);
 
@@ -1079,11 +1058,9 @@ class DropboxController extends Controller
             $text = $pdf->getText();
             unlink($tempPdfPath);
 
-            // CRITICAL DEBUG: Log the extracted text
             Log::info('PDF text length: '.strlen($text));
             Log::info('PDF text (first 500 chars): '.substr($text, 0, 500));
 
-            // If text is empty or very short, the PDF might be an image
             if (strlen($text) < 50) {
                 Log::error('PDF appears to be empty or an image! Text length: '.strlen($text));
                 Log::error('Full text: '.$text);
@@ -1099,7 +1076,6 @@ class DropboxController extends Controller
                 'quantity' => $this->extractQuantityFromPart3($text),
             ];
 
-            // Calculate recycled materials
             $wasteDesc = strtolower($data['waste_description']);
             $data['recycled_plastic'] = (strpos($wasteDesc, 'plastic') !== false) ? $data['quantity'] : 0;
             $data['recycled_paper'] = (strpos($wasteDesc, 'paper') !== false || strpos($wasteDesc, 'cb') !== false) ? $data['quantity'] : 0;

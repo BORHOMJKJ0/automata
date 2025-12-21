@@ -632,14 +632,15 @@ class DropboxController extends Controller
         try {
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer '.$accessToken,
-                'Content-Type' => 'application/octet-stream',
                 'Dropbox-API-Arg' => json_encode([
                     'path' => $path,
                     'mode' => 'add',
                     'autorename' => true,
                     'mute' => false,
                 ]),
-            ])->withBody($content)->post('https://content.dropboxapi.com/2/files/upload');
+                'Content-Type' => 'application/octet-stream',
+            ])->withBody($content, 'application/octet-stream')
+                ->post('https://content.dropboxapi.com/2/files/upload');
 
             if ($response->successful()) {
                 Log::info("File uploaded successfully: {$path}");

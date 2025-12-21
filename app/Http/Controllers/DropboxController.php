@@ -780,6 +780,15 @@ class DropboxController extends Controller
         $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
         $content = preg_replace('/\r\n/', "\n", $content); // Normalize line endings
 
+        // Debug: Log a snippet of content around the field we're looking for
+        if (stripos($content, $fieldName) !== false) {
+            $pos = stripos($content, $fieldName);
+            $snippet = substr($content, max(0, $pos - 50), 200);
+            Log::info("Found '{$fieldName}' in content, snippet: ".json_encode($snippet));
+        } else {
+            Log::warning("Field '{$fieldName}' not found in content at all!");
+        }
+
         // Special handling for Producer Name - it can span multiple lines
         if ($fieldName === 'Producer Name') {
             // Pattern 1: Producer Name : followed by text on next lines
@@ -788,6 +797,8 @@ class DropboxController extends Controller
                 // Clean up multiple lines into single line
                 $value = preg_replace('/\s+/', ' ', $value);
                 if (! empty($value)) {
+                    Log::info("Extracted Producer Name: '{$value}'");
+
                     return $value;
                 }
             }
@@ -796,6 +807,8 @@ class DropboxController extends Controller
             if (preg_match('/Producer\s+Name\s*:\s*([^\n]+)/i', $content, $matches)) {
                 $value = trim($matches[1]);
                 if (! empty($value)) {
+                    Log::info("Extracted Producer Name (same line): '{$value}'");
+
                     return $value;
                 }
             }
@@ -808,6 +821,8 @@ class DropboxController extends Controller
                 $value = trim($matches[1]);
                 $value = preg_replace('/\s+/', ' ', $value);
                 if (! empty($value)) {
+                    Log::info("Extracted Wastes Location: '{$value}'");
+
                     return $value;
                 }
             }
@@ -847,10 +862,14 @@ class DropboxController extends Controller
                 $value = trim($value);
 
                 if (! empty($value)) {
+                    Log::info("Extracted '{$fieldName}' using pattern: '{$value}'");
+
                     return $value;
                 }
             }
         }
+
+        Log::warning("Could not extract '{$fieldName}' from content");
 
         return 'Not Found';
     }

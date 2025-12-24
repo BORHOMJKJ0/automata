@@ -660,7 +660,7 @@ class DropboxController extends Controller
 
             $this->bitrixService->notifyError('Excel Processing', $e->getMessage());
 
-            return back()->with('error', 'خطأ: '.$e->getMessage());
+            return false;
         }
     }
 

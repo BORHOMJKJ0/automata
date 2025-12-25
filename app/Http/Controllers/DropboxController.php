@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Services\BitrixNotificationService;
@@ -14,11 +13,8 @@ use Smalot\PdfParser\Parser as PdfParser;
 class DropboxController extends Controller
 {
     private string $clientId;
-
     private string $clientSecret;
-
     private string $redirectUri;
-
     private BitrixNotificationService $bitrixService;
 
     public function __construct()
@@ -28,11 +24,9 @@ class DropboxController extends Controller
         $this->redirectUri = env('DROPBOX_REDIRECT_URI', url('/dropbox/callback'));
         $this->middleware('web');
         $this->bitrixService = new BitrixNotificationService;
-
     }
 
     // ==================== AUTHENTICATION ====================
-
     public function index()
     {
         return view('dropbox.index');
@@ -46,14 +40,12 @@ class DropboxController extends Controller
             'response_type' => 'code',
             'token_access_type' => 'offline',
         ]);
-
         return redirect($authUrl);
     }
 
     public function callback(Request $request)
     {
         $code = $request->get('code');
-
         if (! $code) {
             return redirect()->route('dropbox.index')
                 ->with('error', 'فشل الاتصال بـ Dropbox');
@@ -79,10 +71,8 @@ class DropboxController extends Controller
 
             return redirect()->route('dropbox.index')
                 ->with('success', 'تم الاتصال بـ Dropbox بنجاح!');
-
         } catch (\Exception $e) {
             Log::error('OAuth Error: '.$e->getMessage());
-
             return redirect()->route('dropbox.index')
                 ->with('error', 'خطأ: '.$e->getMessage());
         }
@@ -91,34 +81,28 @@ class DropboxController extends Controller
     public function logout()
     {
         Session::forget(['dropbox_access_token', 'dropbox_account_id', 'current_shared_url']);
-
         return redirect()->route('dropbox.index')->with('success', 'تم تسجيل الخروج بنجاح');
     }
 
     // ==================== FILE BROWSING ====================
-
     public function browseSharedLink(Request $request)
     {
         $accessToken = Session::get('dropbox_access_token');
-
         if (! $accessToken) {
             return redirect()->route('dropbox.index')->with('error', 'يجب تسجيل الدخول أولاً');
         }
 
         $sharedUrl = $request->input('shared_url');
-
         if (! $sharedUrl) {
             return redirect()->route('dropbox.index')->with('error', 'الرجاء إدخال رابط مشارك');
         }
 
         $request->validate(['shared_url' => 'required|url']);
-
         $sharedUrl = str_replace('dl=0', 'dl=1', $sharedUrl);
         Session::put('current_shared_url', $sharedUrl);
 
         try {
             $metadata = $this->getSharedLinkMetadata($accessToken, $sharedUrl);
-
             if (! $metadata || $metadata['.tag'] !== 'folder') {
                 return redirect()->route('dropbox.index')
                     ->with('error', 'الرابط يجب أن يكون لمجلد وليس لملف');
@@ -131,10 +115,8 @@ class DropboxController extends Controller
                 'currentPath' => '',
                 'sharedUrl' => $sharedUrl,
             ]);
-
         } catch (\Exception $e) {
             Log::error('Browse Error: '.$e->getMessage());
-
             return redirect()->route('dropbox.index')
                 ->with('error', 'خطأ: '.$e->getMessage());
         }
@@ -143,7 +125,6 @@ class DropboxController extends Controller
     public function browseSharedSubfolder(Request $request)
     {
         $accessToken = Session::get('dropbox_access_token');
-
         if (! $accessToken) {
             return redirect()->route('dropbox.index')->with('error', 'يجب تسجيل الدخول أولاً');
         }
@@ -151,7 +132,6 @@ class DropboxController extends Controller
         $sharedUrl = $request->query('shared_url')
             ?? $request->input('shared_url')
             ?? Session::get('current_shared_url');
-
         $path = $request->query('path') ?? $request->input('path', '') ?? '';
 
         if (! $sharedUrl) {
@@ -168,20 +148,16 @@ class DropboxController extends Controller
                 'currentPath' => $path,
                 'sharedUrl' => $sharedUrl,
             ]);
-
         } catch (\Exception $e) {
             Log::error('Browse Subfolder Error: '.$e->getMessage());
-
             return back()->with('error', 'لا يمكن فتح هذا المجلد');
         }
     }
 
     // ==================== FILE OPERATIONS ====================
-
     public function downloadSharedFile(Request $request)
     {
         $accessToken = Session::get('dropbox_access_token');
-
         if (! $accessToken) {
             return back()->with('error', 'يجب تسجيل الدخول أولاً');
         }
@@ -198,25 +174,20 @@ class DropboxController extends Controller
             Log::info("Shared URL: {$sharedUrl}");
 
             $content = $this->downloadFileContent($accessToken, $sharedUrl, $path);
-
             if (! $content) {
                 Log::error("Failed to download file: {$path}");
-
                 return back()->with('error', 'فشل تحميل الملف - تحقق من الصلاحيات');
             }
 
             $filename = basename($path);
-
             Log::info("File downloaded successfully: {$filename}, size: ".strlen($content).' bytes');
 
             return response($content)
                 ->header('Content-Type', 'application/octet-stream')
                 ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
-
         } catch (\Exception $e) {
             Log::error('Download Error: '.$e->getMessage());
             Log::error('Stack trace: '.$e->getTraceAsString());
-
             return back()->with('error', 'خطأ: '.$e->getMessage());
         }
     }
@@ -224,7 +195,6 @@ class DropboxController extends Controller
     public function previewFile(Request $request)
     {
         $accessToken = Session::get('dropbox_access_token');
-
         if (! $accessToken) {
             return back()->with('error', 'يجب تسجيل الدخول أولاً');
         }
@@ -238,7 +208,6 @@ class DropboxController extends Controller
 
         try {
             $content = $this->downloadFileContent($accessToken, $sharedUrl, $path);
-
             if (! $content) {
                 return back()->with('error', 'فشل قراءة الملف');
             }
@@ -257,20 +226,16 @@ class DropboxController extends Controller
                 'extension' => strtolower($extension),
                 'sharedUrl' => $sharedUrl,
             ]);
-
         } catch (\Exception $e) {
             Log::error('Preview Error: '.$e->getMessage());
-
             return back()->with('error', 'خطأ: '.$e->getMessage());
         }
     }
 
     // ==================== SEARCH & MATCH ====================
-
     public function searchAndMatch(Request $request)
     {
         $accessToken = Session::get('dropbox_access_token');
-
         if (! $accessToken) {
             return back()->with('error', 'يجب تسجيل الدخول أولاً');
         }
@@ -393,24 +358,20 @@ class DropboxController extends Controller
                 'sharedUrl' => $sharedUrl,
                 'currentPath' => $currentPath,
             ]);
-
         } catch (\Exception $e) {
             Log::error('Search Error: '.$e->getMessage());
             Log::error($e->getTraceAsString());
-
             return back()->with('error', 'خطأ: '.$e->getMessage());
         }
     }
 
     // ==================== EXCEL PROCESSING ====================
-
     public function processExcelUpdate(Request $request)
     {
         set_time_limit(600);
         ini_set('memory_limit', '512M');
 
         $accessToken = Session::get('dropbox_access_token');
-
         if (! $accessToken) {
             return back()->with('error', 'يجب تسجيل الدخول أولاً');
         }
@@ -456,12 +417,10 @@ class DropboxController extends Controller
                         'status' => 'error',
                         'message' => 'Failed to download PDF',
                     ];
-
                     continue;
                 }
 
                 $pdfData = $this->extractPdfData($pdfContent);
-
                 if ($pdfData && $pdfData['manifest_number'] !== 'Not Found') {
                     $updated = $this->updateExcelRow($worksheet, $pdfData);
                     if ($updated) {
@@ -485,14 +444,11 @@ class DropboxController extends Controller
 
             $writer = new Xlsx($spreadsheet);
             $writer->save($tempExcelPath);
-
             $updatedContent = file_get_contents($tempExcelPath);
             unlink($tempExcelPath);
 
-            $fileName = 'Updated_'.date('Ymd_His').'_'.basename($excelPath);
-            $newExcelPath = dirname($excelPath).'/'.$fileName;
-
-            $uploaded = $this->uploadToDropbox($accessToken, $newExcelPath, $updatedContent);
+            // Upload with overwrite mode
+            $uploaded = $this->uploadToDropbox($accessToken, $excelPath, $updatedContent, true);
 
             if ($uploaded) {
                 Log::info('=== Excel Update Complete ===');
@@ -508,17 +464,15 @@ class DropboxController extends Controller
                     'success' => true,
                     'updatedCount' => $updatedCount,
                     'processedFiles' => $processedFiles,
-                    'newFilePath' => $newExcelPath,
+                    'newFilePath' => $excelPath,
                     'sharedUrl' => $sharedUrl,
                 ]);
             }
 
             return back()->with('error', 'فشل رفع الملف المحدث');
-
         } catch (\Exception $e) {
             Log::error('Process Excel Error: '.$e->getMessage());
             Log::error($e->getTraceAsString());
-
             return back()->with('error', 'خطأ: '.$e->getMessage());
         }
     }
@@ -535,7 +489,6 @@ class DropboxController extends Controller
     }
 
     // ==================== HELPER METHODS ====================
-
     private function getSharedLinkMetadata(string $accessToken, string $sharedUrl): ?array
     {
         try {
@@ -547,10 +500,8 @@ class DropboxController extends Controller
             ]);
 
             return $response->successful() ? $response->json() : null;
-
         } catch (\Exception $e) {
             Log::error('Metadata Error: '.$e->getMessage());
-
             return null;
         }
     }
@@ -560,11 +511,9 @@ class DropboxController extends Controller
         if (preg_match('/Part 3.*?Waste Description\s+Physical State\s+Quantity.*?\n\s*([^\n]+)/is', $text, $matches)) {
             return trim($matches[1]);
         }
-
         if (preg_match('/Part 3.*?Storage.*?Waste Description.*?\n\s*([^\n]+)/is', $text, $matches)) {
             return trim($matches[1]);
         }
-
         return 'Not Found';
     }
 
@@ -573,11 +522,9 @@ class DropboxController extends Controller
         if (preg_match('/Part 3.*?Waste Description\s+Physical State\s+Quantity.*?\n[^\d]*(\d+)/is', $text, $matches)) {
             return (int) $matches[1];
         }
-
         if (preg_match('/Part 3.*?Solid\s+(\d+)/is', $text, $matches)) {
             return (int) $matches[1];
         }
-
         return 0;
     }
 
@@ -586,11 +533,10 @@ class DropboxController extends Controller
         try {
             $highestRow = $worksheet->getHighestRow();
             $manifestNumber = trim($pdfData['manifest_number']);
-            $foundRow = null;
 
+            $foundRow = null;
             for ($row = 2; $row <= $highestRow; $row++) {
                 $cellValue = trim((string) $worksheet->getCell("A{$row}")->getValue());
-
                 if ($cellValue == $manifestNumber) {
                     $foundRow = $row;
                     Log::info("Found existing row {$row} for manifest {$manifestNumber}");
@@ -614,33 +560,52 @@ class DropboxController extends Controller
             $worksheet->setCellValue("I{$foundRow}", $pdfData['recycled_steel']);
 
             Log::info("Row {$foundRow} updated successfully");
-
             return true;
-
         } catch (\Exception $e) {
             Log::error('Excel Update Error: '.$e->getMessage());
-
             return false;
         }
     }
 
-    private function uploadToDropbox(string $accessToken, string $path, string $content): bool
+    private function uploadToDropbox(string $accessToken, string $path, string $content, bool $overwrite = false): bool
     {
         try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer '.$accessToken,
-                'Dropbox-API-Arg' => json_encode([
-                    'path' => $path,
-                    'mode' => 'add',
-                    'autorename' => true,
-                    'mute' => false,
-                ]),
-                'Content-Type' => 'application/octet-stream',
-            ])->withBody($content, 'application/octet-stream')
+            Log::info("=== Starting Upload to Dropbox ===");
+            Log::info("Path: {$path}");
+            Log::info("Content size: " . strlen($content) . " bytes");
+            Log::info("Overwrite mode: " . ($overwrite ? 'YES' : 'NO'));
+
+            $normalizedPath = $path;
+            if (strpos($normalizedPath, '/') !== 0) {
+                $normalizedPath = '/' . $normalizedPath;
+            }
+
+            Log::info("Normalized path: {$normalizedPath}");
+
+            $mode = $overwrite ? 'overwrite' : 'add';
+
+            $apiArg = [
+                'path' => $normalizedPath,
+                'mode' => $mode,
+                'autorename' => !$overwrite,
+                'mute' => false,
+            ];
+
+            Log::info("API Args: " . json_encode($apiArg));
+
+            $response = Http::timeout(120)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $accessToken,
+                    'Dropbox-API-Arg' => json_encode($apiArg),
+                    'Content-Type' => 'application/octet-stream',
+                ])
+                ->withBody($content, 'application/octet-stream')
                 ->post('https://content.dropboxapi.com/2/files/upload');
 
             if ($response->successful()) {
-                Log::info("File uploaded successfully: {$path}");
+                $responseData = $response->json();
+                Log::info("✓ File uploaded successfully!");
+                Log::info("Response: " . json_encode($responseData));
 
                 $this->bitrixService->notifyFileUploaded(
                     basename($path),
@@ -651,15 +616,16 @@ class DropboxController extends Controller
                 return true;
             }
 
-            Log::error('Upload failed: '.$response->body());
+            Log::error('✗ Upload failed!');
+            Log::error('Status: ' . $response->status());
+            Log::error('Response: ' . $response->body());
 
             return false;
 
         } catch (\Exception $e) {
-            Log::error('Process Excel Error: '.$e->getMessage());
-
-            $this->bitrixService->notifyError('Excel Processing', $e->getMessage());
-
+            Log::error('Upload Exception: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            $this->bitrixService->notifyError('File Upload', $e->getMessage());
             return false;
         }
     }
@@ -670,10 +636,8 @@ class DropboxController extends Controller
 
         foreach ($entries as $entry) {
             $path = $entry['path_display'] ?? $entry['path_lower'] ?? null;
-
             if (! $path) {
                 Log::warning('Entry without path: '.json_encode($entry));
-
                 continue;
             }
 
@@ -704,7 +668,6 @@ class DropboxController extends Controller
     private function isEditable(string $extension): bool
     {
         $editable = ['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'php', 'py', 'java'];
-
         return in_array(strtolower($extension), $editable);
     }
 
@@ -715,7 +678,6 @@ class DropboxController extends Controller
             'php', 'py', 'java', 'c', 'cpp', 'h', 'yml', 'yaml',
             'ini', 'conf', 'log', 'sql', 'sh', 'bat',
         ];
-
         return in_array(strtolower($extension), $previewable);
     }
 
@@ -735,9 +697,7 @@ class DropboxController extends Controller
             }
 
             $data = $response->json();
-
             return $this->organizeItems($data['entries'] ?? []);
-
         } catch (\Exception $e) {
             Log::error('List Folder Error: '.$e->getMessage());
             throw $e;
@@ -747,7 +707,6 @@ class DropboxController extends Controller
     private function getAllFilesRecursive(string $accessToken, string $sharedUrl, ?string $path = '', ?string $cursor = null): array
     {
         $allEntries = [];
-
         $path = $path ?? '';
 
         try {
@@ -773,7 +732,6 @@ class DropboxController extends Controller
             if ($response->successful()) {
                 $data = $response->json();
                 $entries = $data['entries'] ?? [];
-
                 Log::info('Found '.count($entries)." entries in path: {$path}");
 
                 foreach ($entries as $entry) {
@@ -796,7 +754,6 @@ class DropboxController extends Controller
             } else {
                 Log::error('List folder failed: '.$response->body());
             }
-
         } catch (\Exception $e) {
             Log::error('Recursive List Error: '.$e->getMessage());
             Log::error('Stack trace: '.$e->getTraceAsString());
@@ -808,28 +765,37 @@ class DropboxController extends Controller
     private function downloadFileContent(string $accessToken, string $sharedUrl, string $path): ?string
     {
         try {
-            Log::info("Attempting to download: {$path}");
-            Log::info("Using shared URL: {$sharedUrl}");
+            Log::info("=== Attempting Download ===");
+            Log::info("Original path: {$path}");
+            Log::info("Shared URL: {$sharedUrl}");
+
+            $metadata = $this->getSharedLinkMetadata($accessToken, $sharedUrl);
+
+            if (!$metadata) {
+                Log::error("Could not get shared link metadata");
+                return null;
+            }
+
+            $sharedLinkPath = $metadata['path_lower'] ?? '';
+            Log::info("Shared link root path: {$sharedLinkPath}");
 
             $relativePath = $path;
 
-            if (strpos($relativePath, '/') === 0) {
-                $relativePath = substr($relativePath, 1);
+            if (!empty($sharedLinkPath) && strpos($path, $sharedLinkPath) === 0) {
+                $relativePath = substr($path, strlen($sharedLinkPath));
             }
 
-            $pathParts = explode('/', $relativePath);
-            if (count($pathParts) > 1) {
-                array_shift($pathParts);
-                $relativePath = '/'.implode('/', $pathParts);
-            } else {
-                $relativePath = '/'.$relativePath;
+            if (empty($relativePath)) {
+                $relativePath = '/';
+            } elseif (strpos($relativePath, '/') !== 0) {
+                $relativePath = '/' . $relativePath;
             }
 
-            Log::info("Using relative path: {$relativePath}");
+            Log::info("Calculated relative path: {$relativePath}");
 
             $response = Http::timeout(60)
                 ->withHeaders([
-                    'Authorization' => 'Bearer '.$accessToken,
+                    'Authorization' => 'Bearer ' . $accessToken,
                     'Dropbox-API-Arg' => json_encode([
                         'url' => $sharedUrl,
                         'path' => $relativePath,
@@ -840,21 +806,19 @@ class DropboxController extends Controller
 
             if ($response->successful()) {
                 $size = strlen($response->body());
-                Log::info("Successfully downloaded {$path}, size: {$size} bytes");
-
+                Log::info("✓ Download successful! Size: {$size} bytes");
                 return $response->body();
             }
 
-            Log::error("Download failed for: {$path}");
-            Log::error('Response status: '.$response->status());
-            Log::error('Response body: '.$response->body());
+            Log::error("✗ Download failed!");
+            Log::error('Status: ' . $response->status());
+            Log::error('Response: ' . $response->body());
 
             return null;
 
         } catch (\Exception $e) {
-            Log::error("Download exception for {$path}: ".$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
-
+            Log::error("Download exception: " . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
             return null;
         }
     }
@@ -894,7 +858,6 @@ class DropboxController extends Controller
             } catch (\Exception $e) {
                 Log::error('Failed to parse PDF: '.$e->getMessage());
                 unlink($tempPdfPath);
-
                 return [
                     'matches' => false,
                     'info' => array_merge($file, [
@@ -981,7 +944,6 @@ class DropboxController extends Controller
                 $value = preg_replace('/\s+/', ' ', $value);
                 if (! empty($value)) {
                     Log::info("Extracted Producer Name: '{$value}'");
-
                     return $value;
                 }
             }
@@ -990,7 +952,6 @@ class DropboxController extends Controller
                 $value = trim($matches[1]);
                 if (! empty($value)) {
                     Log::info("Extracted Producer Name (same line): '{$value}'");
-
                     return $value;
                 }
             }
@@ -1002,7 +963,6 @@ class DropboxController extends Controller
                 $value = preg_replace('/\s+/', ' ', $value);
                 if (! empty($value)) {
                     Log::info("Extracted Wastes Location: '{$value}'");
-
                     return $value;
                 }
             }
@@ -1022,9 +982,7 @@ class DropboxController extends Controller
 
         $patterns = [
             '/'.preg_quote($fieldName, '/').'\s*:\s*([^\n]+)/i',
-
             '/'.preg_quote($fieldName, '/').'\s*:\s*\n\s*([^\n]+)/i',
-
             '/'.preg_quote($fieldName, '/').'\s*:\s*\n?(.*?)(?=\n(?:[A-Z][a-zA-Z\s]+\s*:|Part \d+|Manifest|Trade License|Mobile No\.|Email|Company Name|Driver Name|License Plate|Phone No\.|Facility|City|Street Name|Waste Description|Collection Point)|$)/is',
         ];
 
@@ -1036,14 +994,12 @@ class DropboxController extends Controller
 
                 if (! empty($value)) {
                     Log::info("Extracted '{$fieldName}' using pattern: '{$value}'");
-
                     return $value;
                 }
             }
         }
 
         Log::warning("Could not extract '{$fieldName}' from content");
-
         return 'Not Found';
     }
 
@@ -1064,7 +1020,6 @@ class DropboxController extends Controller
             if (strlen($text) < 50) {
                 Log::error('PDF appears to be empty or an image! Text length: '.strlen($text));
                 Log::error('Full text: '.$text);
-
                 return null;
             }
 
@@ -1085,10 +1040,8 @@ class DropboxController extends Controller
             Log::info('PDF Data extracted', $data);
 
             return $data;
-
         } catch (\Exception $e) {
             Log::error('PDF Extraction Error: '.$e->getMessage());
-
             return null;
         }
     }

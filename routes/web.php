@@ -18,7 +18,7 @@ Route::get('/', function () {
 });
 
 // ==================== AUTHENTICATION ====================
-Route::prefix('dropbox')->controller(DropboxAuthController::class)->name('dropbox.')->group(function () {
+Route::prefix('dropbox')->name('dropbox.')->controller(DropboxAuthController::class)->group(function () {
     Route::get('/', 'index')->name('index');
     Route::get('/connect', 'connect')->name('connect');
     Route::get('/callback', 'callback')->name('callback');
@@ -26,7 +26,7 @@ Route::prefix('dropbox')->controller(DropboxAuthController::class)->name('dropbo
 });
 
 // ==================== FILE BROWSING ====================
-Route::prefix('dropbox/browse')->controller(DropboxBrowserController::class)->name('dropbox.browse.')->group(function () {
+Route::prefix('dropbox/browse')->name('dropbox.browse.')->controller(DropboxBrowserController::class)->group(function () {
     Route::match(['get', 'post'], '/shared', 'browseSharedLink')
         ->name('shared');
     Route::get('/shared/folder', 'browseSharedSubfolder')
@@ -34,7 +34,7 @@ Route::prefix('dropbox/browse')->controller(DropboxBrowserController::class)->na
 });
 
 // ==================== FILE OPERATIONS ====================
-Route::prefix('dropbox/file')->controller(DropboxFileController::class)->name('dropbox.file.')->group(function () {
+Route::prefix('dropbox/file')->name('dropbox.shared.')->controller(DropboxFileController::class)->group(function () {
     Route::post('/download', 'download')
         ->name('download');
     Route::get('/preview', 'preview')
@@ -42,15 +42,15 @@ Route::prefix('dropbox/file')->controller(DropboxFileController::class)->name('d
 });
 
 // ==================== SEARCH & MATCH ====================
-Route::prefix('dropbox/search')->controller(DropboxSearchController::class)->name('dropbox.search.')->group(function () {
+Route::prefix('dropbox/search')->name('dropbox.search.')->controller(DropboxSearchController::class)->group(function () {
     Route::match(['get', 'post'], '/match', 'searchAndMatch')
         ->name('match');
 });
 
 // ==================== EXCEL PROCESSING ====================
-Route::prefix('dropbox/excel')->controller(DropboxExcelController::class)->name('dropbox.excel.')->group(function () {
+Route::prefix('dropbox/excel')->name('dropbox.process.')->controller(DropboxExcelController::class)->group(function () {
     Route::post('/process', 'processExcelUpdate')
-        ->name('process');
+        ->name('excel');
     Route::get('/results', 'showProcessResults')
         ->name('results');
 });

@@ -1,0 +1,22 @@
+{
+    "sourceFile": "app/Http/Controllers/Dropbox/DropboxBrowserController.php",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1766740576565,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1766740781555,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,1 +1,92 @@\n-<?php\n\\ No newline at end of file\n+<?php\n+namespace App\\Http\\Controllers\\Dropbox;\n+\n+use Illuminate\\Http\\Request;\n+use Illuminate\\Support\\Facades\\Log;\n+use Illuminate\\Support\\Facades\\Session;\n+use App\\Http\\Controllers\\Controller;\n+use App\\Services\\Dropbox\\DropboxApiService;\n+\n+class DropboxBrowserController extends Controller\n+{\n+    private DropboxApiService $dropboxApi;\n+\n+    public function __construct(DropboxApiService $dropboxApi)\n+    {\n+        $this->middleware('web');\n+        $this->dropboxApi = $dropboxApi;\n+    }\n+\n+    public function browseSharedLink(Request $request)\n+    {\n+        $accessToken = Session::get('dropbox_access_token');\n+\n+        if (!$accessToken) {\n+            return redirect()->route('dropbox.index')->with('error', 'يجب تسجيل الدخول أولاً');\n+        }\n+\n+        $sharedUrl = $request->input('shared_url');\n+\n+        if (!$sharedUrl) {\n+            return redirect()->route('dropbox.index')->with('error', 'الرجاء إدخال رابط مشارك');\n+        }\n+\n+        $request->validate(['shared_url' => 'required|url']);\n+        $sharedUrl = str_replace('dl=0', 'dl=1', $sharedUrl);\n+        Session::put('current_shared_url', $sharedUrl);\n+\n+        try {\n+            $metadata = $this->dropboxApi->getSharedLinkMetadata($accessToken, $sharedUrl);\n+\n+            if (!$metadata || $metadata['.tag'] !== 'folder') {\n+                return redirect()->route('dropbox.index')\n+                    ->with('error', 'الرابط يجب أن يكون لمجلد وليس لملف');\n+            }\n+\n+            $items = $this->dropboxApi->listFolderContents($accessToken, $sharedUrl, '');\n+\n+            return view('dropbox.browse', [\n+                'items' => $items,\n+                'currentPath' => '',\n+                'sharedUrl' => $sharedUrl,\n+            ]);\n+        } catch (\\Exception $e) {\n+            Log::error('Browse Error: ' . $e->getMessage());\n+            return redirect()->route('dropbox.index')\n+                ->with('error', 'خطأ: ' . $e->getMessage());\n+        }\n+    }\n+\n+    public function browseSharedSubfolder(Request $request)\n+    {\n+        $accessToken = Session::get('dropbox_access_token');\n+\n+        if (!$accessToken) {\n+            return redirect()->route('dropbox.index')->with('error', 'يجب تسجيل الدخول أولاً');\n+        }\n+\n+        $sharedUrl = $request->query('shared_url')\n+            ?? $request->input('shared_url')\n+            ?? Session::get('current_shared_url');\n+        $path = $request->query('path') ?? $request->input('path', '') ?? '';\n+\n+        if (!$sharedUrl) {\n+            return redirect()->route('dropbox.index')->with('error', 'رابط مشارك مطلوب');\n+        }\n+\n+        Session::put('current_shared_url', $sharedUrl);\n+\n+        try {\n+            $items = $this->dropboxApi->listFolderContents($accessToken, $sharedUrl, $path);\n+\n+            return view('dropbox.browse', [\n+                'items' => $items,\n+                'currentPath' => $path,\n+                'sharedUrl' => $sharedUrl,\n+            ]);\n+        } catch (\\Exception $e) {\n+            Log::error('Browse Subfolder Error: ' . $e->getMessage());\n+            return back()->with('error', 'لا يمكن فتح هذا المجلد');\n+        }\n+    }\n+}\n"
+                }
+            ],
+            "date": 1766740576565,
+            "name": "Commit-0",
+            "content": "<?php"
+        }
+    ]
+}

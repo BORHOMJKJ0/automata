@@ -1,0 +1,22 @@
+{
+    "sourceFile": "app/Http/Controllers/Dropbox/DropboxExcelController.php",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1766740571529,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1766740900076,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,1 +1,91 @@\n <?php\n+namespace App\\Http\\Controllers\\Dropbox;\n+\n+use Illuminate\\Http\\Request;\n+use Illuminate\\Support\\Facades\\Log;\n+use Illuminate\\Support\\Facades\\Session;\n+use App\\Http\\Controllers\\Controller;\n+use App\\Services\\Dropbox\\DropboxApiService;\n+use App\\Services\\Excel\\ExcelProcessorService;\n+use App\\Services\\BitrixNotificationService;\n+\n+class DropboxExcelController extends Controller\n+{\n+    private DropboxApiService $dropboxApi;\n+    private ExcelProcessorService $excelProcessor;\n+    private BitrixNotificationService $bitrixService;\n+\n+    public function __construct(\n+        DropboxApiService $dropboxApi,\n+        ExcelProcessorService $excelProcessor,\n+        BitrixNotificationService $bitrixService\n+    ) {\n+        $this->middleware('web');\n+        $this->dropboxApi = $dropboxApi;\n+        $this->excelProcessor = $excelProcessor;\n+        $this->bitrixService = $bitrixService;\n+    }\n+\n+    public function processExcelUpdate(Request $request)\n+    {\n+        set_time_limit(600);\n+        ini_set('memory_limit', '512M');\n+\n+        $accessToken = Session::get('dropbox_access_token');\n+\n+        if (!$accessToken) {\n+            return back()->with('error', 'يجب تسجيل الدخول أولاً');\n+        }\n+\n+        $sharedUrl = $request->input('shared_url') ?? Session::get('current_shared_url');\n+        $matchingFiles = json_decode($request->input('matching_files'), true);\n+        $excelPath = $request->input('excel_file');\n+\n+        if (!$sharedUrl || !$excelPath || empty($matchingFiles)) {\n+            return back()->with('error', 'معلومات غير كاملة');\n+        }\n+\n+        try {\n+            Log::info('=== Starting Excel Update ===');\n+\n+            $result = $this->excelProcessor->processExcelWithPdfs(\n+                $accessToken,\n+                $sharedUrl,\n+                $excelPath,\n+                $matchingFiles\n+            );\n+\n+            if ($result['success']) {\n+                $this->bitrixService->notifyExcelProcessed(\n+                    count($matchingFiles),\n+                    $result['updatedCount'],\n+                    $excelPath\n+                );\n+\n+                return view('dropbox.process-results', [\n+                    'success' => true,\n+                    'updatedCount' => $result['updatedCount'],\n+                    'processedFiles' => $result['processedFiles'],\n+                    'newFilePath' => $excelPath,\n+                    'sharedUrl' => $sharedUrl,\n+                ]);\n+            }\n+\n+            return back()->with('error', 'فشل معالجة الملف');\n+        } catch (\\Exception $e) {\n+            Log::error('Process Excel Error: ' . $e->getMessage());\n+            return back()->with('error', 'خطأ: ' . $e->getMessage());\n+        }\n+    }\n+\n+    public function showProcessResults()\n+    {\n+        return view('dropbox.process-results', [\n+            'success' => session('success', false),\n+            'updatedCount' => session('updatedCount', 0),\n+            'processedFiles' => session('processedFiles', []),\n+            'newFilePath' => session('newFilePath', ''),\n+            'sharedUrl' => session('sharedUrl', ''),\n+        ]);\n+    }\n+}\n\\ No newline at end of file\n"
+                }
+            ],
+            "date": 1766740571529,
+            "name": "Commit-0",
+            "content": "<?php\n"
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+{
+    "sourceFile": "app/Http/Controllers/Dropbox/DropboxAuthController.php",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1766740586224,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1766740761822,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,1 +1,82 @@\n-<?php\n\\ No newline at end of file\n+<?php\n+namespace App\\Http\\Controllers\\Dropbox;\n+\n+use Illuminate\\Http\\Request;\n+use Illuminate\\Support\\Facades\\Http;\n+use Illuminate\\Support\\Facades\\Log;\n+use Illuminate\\Support\\Facades\\Session;\n+use App\\Http\\Controllers\\Controller;\n+\n+class DropboxAuthController extends Controller\n+{\n+    private string $clientId;\n+    private string $clientSecret;\n+    private string $redirectUri;\n+\n+    public function __construct()\n+    {\n+        $this->clientId = env('DROPBOX_CLIENT_ID');\n+        $this->clientSecret = env('DROPBOX_CLIENT_SECRET');\n+        $this->redirectUri = env('DROPBOX_REDIRECT_URI', url('/dropbox/callback'));\n+        $this->middleware('web');\n+    }\n+\n+    public function index()\n+    {\n+        return view('dropbox.index');\n+    }\n+\n+    public function connect()\n+    {\n+        $authUrl = 'https://www.dropbox.com/oauth2/authorize?' . http_build_query([\n+            'client_id' => $this->clientId,\n+            'redirect_uri' => $this->redirectUri,\n+            'response_type' => 'code',\n+            'token_access_type' => 'offline',\n+        ]);\n+\n+        return redirect($authUrl);\n+    }\n+\n+    public function callback(Request $request)\n+    {\n+        $code = $request->get('code');\n+\n+        if (!$code) {\n+            return redirect()->route('dropbox.index')\n+                ->with('error', 'فشل الاتصال بـ Dropbox');\n+        }\n+\n+        try {\n+            $response = Http::asForm()->post('https://api.dropboxapi.com/oauth2/token', [\n+                'code' => $code,\n+                'grant_type' => 'authorization_code',\n+                'client_id' => $this->clientId,\n+                'client_secret' => $this->clientSecret,\n+                'redirect_uri' => $this->redirectUri,\n+            ]);\n+\n+            if ($response->failed()) {\n+                return redirect()->route('dropbox.index')\n+                    ->with('error', 'فشل الحصول على صلاحيات الوصول');\n+            }\n+\n+            $data = $response->json();\n+            Session::put('dropbox_access_token', $data['access_token']);\n+            Session::put('dropbox_account_id', $data['account_id']);\n+\n+            return redirect()->route('dropbox.index')\n+                ->with('success', 'تم الاتصال بـ Dropbox بنجاح!');\n+        } catch (\\Exception $e) {\n+            Log::error('OAuth Error: ' . $e->getMessage());\n+            return redirect()->route('dropbox.index')\n+                ->with('error', 'خطأ: ' . $e->getMessage());\n+        }\n+    }\n+\n+    public function logout()\n+    {\n+        Session::forget(['dropbox_access_token', 'dropbox_account_id', 'current_shared_url']);\n+        return redirect()->route('dropbox.index')->with('success', 'تم تسجيل الخروج بنجاح');\n+    }\n+}\n"
+                }
+            ],
+            "date": 1766740586224,
+            "name": "Commit-0",
+            "content": "<?php"
+        }
+    ]
+}

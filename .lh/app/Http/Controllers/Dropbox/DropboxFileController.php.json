@@ -1,0 +1,22 @@
+{
+    "sourceFile": "app/Http/Controllers/Dropbox/DropboxFileController.php",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1766740574995,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1766740795467,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,1 +1,96 @@\n-<?php\n\\ No newline at end of file\n+<?php\n+namespace App\\Http\\Controllers\\Dropbox;\n+\n+use Illuminate\\Http\\Request;\n+use Illuminate\\Support\\Facades\\Log;\n+use Illuminate\\Support\\Facades\\Session;\n+use App\\Http\\Controllers\\Controller;\n+use App\\Services\\Dropbox\\DropboxApiService;\n+\n+class DropboxFileController extends Controller\n+{\n+    private DropboxApiService $dropboxApi;\n+\n+    public function __construct(DropboxApiService $dropboxApi)\n+    {\n+        $this->middleware('web');\n+        $this->dropboxApi = $dropboxApi;\n+    }\n+\n+    public function download(Request $request)\n+    {\n+        $accessToken = Session::get('dropbox_access_token');\n+\n+        if (!$accessToken) {\n+            return back()->with('error', 'يجب تسجيل الدخول أولاً');\n+        }\n+\n+        $sharedUrl = $request->input('shared_url');\n+        $path = $request->input('path');\n+\n+        if (!$sharedUrl || !$path) {\n+            return back()->with('error', 'معلومات غير كاملة');\n+        }\n+\n+        try {\n+            Log::info(\"Downloading file: {$path}\");\n+\n+            $content = $this->dropboxApi->downloadFileContent($accessToken, $sharedUrl, $path);\n+\n+            if (!$content) {\n+                return back()->with('error', 'فشل تحميل الملف');\n+            }\n+\n+            $filename = basename($path);\n+\n+            return response($content)\n+                ->header('Content-Type', 'application/octet-stream')\n+                ->header('Content-Disposition', 'attachment; filename=\"' . $filename . '\"');\n+        } catch (\\Exception $e) {\n+            Log::error('Download Error: ' . $e->getMessage());\n+            return back()->with('error', 'خطأ: ' . $e->getMessage());\n+        }\n+    }\n+\n+    public function preview(Request $request)\n+    {\n+        $accessToken = Session::get('dropbox_access_token');\n+\n+        if (!$accessToken) {\n+            return back()->with('error', 'يجب تسجيل الدخول أولاً');\n+        }\n+\n+        $sharedUrl = $request->input('shared_url') ?? $request->query('shared_url');\n+        $path = $request->input('path') ?? $request->query('path');\n+\n+        if (!$sharedUrl || !$path) {\n+            return back()->with('error', 'معلومات غير كاملة');\n+        }\n+\n+        try {\n+            $content = $this->dropboxApi->downloadFileContent($accessToken, $sharedUrl, $path);\n+\n+            if (!$content) {\n+                return back()->with('error', 'فشل قراءة الملف');\n+            }\n+\n+            if (strlen($content) > 1048576) {\n+                return back()->with('error', 'الملف كبير جداً للمعاينة');\n+            }\n+\n+            $filename = basename($path);\n+            $extension = pathinfo($filename, PATHINFO_EXTENSION);\n+\n+            return view('dropbox.preview', [\n+                'path' => $path,\n+                'filename' => $filename,\n+                'content' => $content,\n+                'extension' => strtolower($extension),\n+                'sharedUrl' => $sharedUrl,\n+            ]);\n+        } catch (\\Exception $e) {\n+            Log::error('Preview Error: ' . $e->getMessage());\n+            return back()->with('error', 'خطأ: ' . $e->getMessage());\n+        }\n+    }\n+}\n\\ No newline at end of file\n"
+                }
+            ],
+            "date": 1766740574995,
+            "name": "Commit-0",
+            "content": "<?php"
+        }
+    ]
+}

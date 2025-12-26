@@ -107,6 +107,27 @@ class DropboxApiService
         try {
             Log::info('=== Attempting Download ===');
             Log::info("Original path: {$path}");
+            Log::info("Shared URL: {$sharedUrl}");
+
+            $response = Http::timeout(60)
+                ->withHeaders([
+                    'Authorization' => 'Bearer '.$accessToken,
+                    'Dropbox-API-Arg' => json_encode([
+                        'url' => $sharedUrl,
+                        'path' => $path,
+                    ]),
+                ])
+                ->withBody('', 'application/octet-stream')
+                ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
+
+            if ($response->successful()) {
+                $size = strlen($response->body());
+                Log::info("✓ Download successful (direct path)! Size: {$size} bytes");
+
+                return $response->body();
+            }
+
+            Log::info('Direct path failed, trying with metadata calculation...');
 
             $metadata = $this->getSharedLinkMetadata($accessToken, $sharedUrl);
 
@@ -117,17 +138,23 @@ class DropboxApiService
             }
 
             $sharedLinkPath = $metadata['path_lower'] ?? '';
+            Log::info("Shared link root path: {$sharedLinkPath}");
+
+            $pathLower = strtolower($path);
             $relativePath = $path;
 
-            if (! empty($sharedLinkPath) && strpos($path, $sharedLinkPath) === 0) {
+            if (! empty($sharedLinkPath) && strpos($pathLower, $sharedLinkPath) === 0) {
                 $relativePath = substr($path, strlen($sharedLinkPath));
+                Log::info("Stripped shared link path, relative: {$relativePath}");
             }
 
             if (empty($relativePath)) {
-                $relativePath = '/';
+                $relativePath = '';
             } elseif (strpos($relativePath, '/') !== 0) {
                 $relativePath = '/'.$relativePath;
             }
+
+            Log::info("Final relative path: {$relativePath}");
 
             $response = Http::timeout(60)
                 ->withHeaders([
@@ -141,17 +168,21 @@ class DropboxApiService
                 ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
 
             if ($response->successful()) {
-                Log::info('✓ Download successful! Size: '.strlen($response->body()).' bytes');
+                $size = strlen($response->body());
+                Log::info("✓ Download successful (relative path)! Size: {$size} bytes");
 
                 return $response->body();
             }
 
-            Log::error('✗ Download failed! Status: '.$response->status());
+            Log::error('✗ Download failed!');
+            Log::error('Status: '.$response->status());
+            Log::error('Response: '.$response->body());
 
             return null;
 
         } catch (\Exception $e) {
             Log::error('Download exception: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
 
             return null;
         }

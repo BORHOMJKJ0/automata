@@ -26,7 +26,7 @@ class ExcelProcessorService
         string $excelPath,
         array $matchingFiles
     ): array {
-        $excelContent = $this->dropboxApi->downloadFileContentSmart($accessToken, $sharedUrl, $excelPath);
+        $excelContent = $this->dropboxApi->downloadFileContent($accessToken, $sharedUrl, $excelPath);
 
         if (! $excelContent) {
             throw new \Exception('Failed to download Excel file');
@@ -64,7 +64,8 @@ class ExcelProcessorService
                 continue;
             }
 
-            $pdfContent = $this->dropboxApi->downloadFileContentSmart($accessToken, $sharedUrl, $file['path']);
+            $pdfContent = $this->dropboxApi->downloadFileContent($accessToken, $sharedUrl, $file['path']);
+
             if (! $pdfContent) {
                 $processedFiles[] = [
                     'name' => $file['name'],

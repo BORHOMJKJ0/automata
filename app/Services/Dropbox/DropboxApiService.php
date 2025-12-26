@@ -121,70 +121,35 @@ class DropboxApiService
             $sharedLinkPath = $metadata['path_lower'] ?? '';
             Log::info("Shared link root path: {$sharedLinkPath}");
 
-            // ===== FIX: حساب الـ relative path بشكل صحيح =====
-            $relativePath = '';
-
-            // تحويل كل شيء إلى lowercase للمقارنة
+            // Calculate relative path
             $pathLower = strtolower($path);
-            $sharedLinkPathLower = strtolower($sharedLinkPath);
+            $relativePath = $path;
 
-            if (! empty($sharedLinkPathLower) && strpos($pathLower, $sharedLinkPathLower) === 0) {
-                // إزالة الـ shared link path من البداية
+            if (! empty($sharedLinkPath) && strpos($pathLower, $sharedLinkPath) === 0) {
                 $relativePath = substr($path, strlen($sharedLinkPath));
-            } else {
-                // إذا لم يكن الـ path يبدأ بـ shared link path، استخدم الـ path كامل
-                $relativePath = $path;
             }
 
-            // تنظيف الـ relative path
+            // Clean up the relative path
             $relativePath = ltrim($relativePath, '/');
 
             Log::info("Calculated relative path: '{$relativePath}'");
 
-            // ===== إعداد المحاولات المختلفة =====
+            // Prepare attempts
             $attempts = [];
 
             if (! empty($relativePath)) {
-                // محاولة 1: مع slash في البداية
-                $attempts[] = [
-                    'path' => '/'.$relativePath,
-                    'desc' => 'With leading slash',
-                ];
-
-                // محاولة 2: بدون slash
-                $attempts[] = [
-                    'path' => $relativePath,
-                    'desc' => 'Without leading slash',
-                ];
-
-                // محاولة 3: اسم الملف فقط
-                $filename = basename($path);
-                $attempts[] = [
-                    'path' => '/'.$filename,
-                    'desc' => 'Filename only with slash',
-                ];
-
-                $attempts[] = [
-                    'path' => $filename,
-                    'desc' => 'Filename only without slash',
-                ];
+                $attempts[] = ['path' => '/'.$relativePath, 'desc' => 'With leading slash'];
+                $attempts[] = ['path' => $relativePath, 'desc' => 'Without leading slash'];
             } else {
-                // الملف في جذر المجلد المشترك
+                // File is in root of shared folder
                 $filename = basename($path);
-                $attempts[] = [
-                    'path' => '/'.$filename,
-                    'desc' => 'Root: filename with slash',
-                ];
-
-                $attempts[] = [
-                    'path' => $filename,
-                    'desc' => 'Root: filename without slash',
-                ];
+                $attempts[] = ['path' => $filename, 'desc' => 'Filename only'];
+                $attempts[] = ['path' => '/'.$filename, 'desc' => 'Filename with slash'];
             }
 
-            // ===== محاولة كل path =====
-            foreach ($attempts as $index => $attempt) {
-                Log::info('Attempt '.($index + 1).": {$attempt['desc']} = '{$attempt['path']}'");
+            // Try each attempt
+            foreach ($attempts as $attempt) {
+                Log::info("Trying: {$attempt['desc']} = '{$attempt['path']}'");
 
                 $response = Http::timeout(60)
                     ->withHeaders([
@@ -199,114 +164,23 @@ class DropboxApiService
 
                 if ($response->successful()) {
                     $size = strlen($response->body());
-                    Log::info("✓ SUCCESS with {$attempt['desc']}! Size: ".number_format($size).' bytes');
+                    Log::info("✓ SUCCESS with {$attempt['desc']}! Size: {$size} bytes");
 
                     return $response->body();
                 }
 
-                $status = $response->status();
-                $body = $response->body();
-                Log::warning("✗ Failed: Status {$status}, Response: {$body}");
-            }
-
-            // ===== محاولة أخيرة: تحميل بدون path (للملفات في الجذر مباشرة) =====
-            Log::info('Final attempt: Download without path parameter');
-
-            $response = Http::timeout(60)
-                ->withHeaders([
-                    'Authorization' => 'Bearer '.$accessToken,
-                    'Dropbox-API-Arg' => json_encode([
-                        'url' => $sharedUrl,
-                    ]),
-                ])
-                ->withBody('', 'application/octet-stream')
-                ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
-
-            if ($response->successful()) {
-                $size = strlen($response->body());
-                Log::info('✓ SUCCESS without path parameter! Size: '.number_format($size).' bytes');
-
-                return $response->body();
+                Log::info("✗ Failed with {$attempt['desc']}: Status ".$response->status());
             }
 
             Log::error('✗ ALL ATTEMPTS FAILED!');
-            Log::error('Last status: '.$response->status());
-            Log::error('Last response: '.$response->body());
 
             return null;
 
         } catch (\Exception $e) {
             Log::error('Download exception: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
 
             return null;
         }
-    }
-
-    public function downloadFileContentDirect(string $accessToken, string $filePath): ?string
-    {
-        try {
-            Log::info('=== Direct Download Attempt ===');
-            Log::info("File path: {$filePath}");
-
-            $response = Http::timeout(60)
-                ->withHeaders([
-                    'Authorization' => 'Bearer '.$accessToken,
-                    'Dropbox-API-Arg' => json_encode([
-                        'path' => $filePath,
-                    ]),
-                ])
-                ->post('https://content.dropboxapi.com/2/files/download');
-
-            if ($response->successful()) {
-                $size = strlen($response->body());
-                Log::info('✓ Direct download SUCCESS! Size: '.number_format($size).' bytes');
-
-                return $response->body();
-            }
-
-            Log::error('✗ Direct download failed: Status '.$response->status());
-            Log::error('Response: '.$response->body());
-
-            return null;
-
-        } catch (\Exception $e) {
-            Log::error('Direct download exception: '.$e->getMessage());
-
-            return null;
-        }
-    }
-
-    /**
-     * دالة محسّنة تجرب كلا الطريقتين
-     */
-    public function downloadFileContentSmart(string $accessToken, string $sharedUrl, string $path): ?string
-    {
-        Log::info('=== Smart Download (trying both methods) ===');
-
-        // محاولة 1: التحميل من shared link (الطريقة الأصلية)
-        Log::info('Method 1: Trying shared link download...');
-        $content = $this->downloadFileContent($accessToken, $sharedUrl, $path);
-
-        if ($content !== null) {
-            Log::info('✓ Shared link method succeeded!');
-
-            return $content;
-        }
-
-        // محاولة 2: التحميل المباشر
-        Log::info('Method 2: Trying direct download...');
-        $content = $this->downloadFileContentDirect($accessToken, $path);
-
-        if ($content !== null) {
-            Log::info('✓ Direct download method succeeded!');
-
-            return $content;
-        }
-
-        Log::error('✗ Both methods failed!');
-
-        return null;
     }
 
     public function uploadFile(string $accessToken, string $path, string $content, bool $overwrite = false): bool

@@ -109,25 +109,44 @@ class DropboxApiService
             Log::info("Original path: {$path}");
             Log::info("Shared URL: {$sharedUrl}");
 
-            $response = Http::timeout(60)
-                ->withHeaders([
-                    'Authorization' => 'Bearer '.$accessToken,
-                    'Dropbox-API-Arg' => json_encode([
-                        'url' => $sharedUrl,
-                        'path' => $path,
-                    ]),
-                ])
-                ->withBody('', 'application/octet-stream')
-                ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
+            // Extract filename from path
+            $filename = basename($path);
+            Log::info("Filename: {$filename}");
 
-            if ($response->successful()) {
-                $size = strlen($response->body());
-                Log::info("✓ Download successful (direct path)! Size: {$size} bytes");
+            // Try method 1: Direct with full path
+            $attempts = [
+                ['path' => $path, 'desc' => 'Full path'],
+                ['path' => '/'.$filename, 'desc' => 'Root + filename'],
+                ['path' => $filename, 'desc' => 'Filename only'],
+                ['path' => '', 'desc' => 'Empty path'],
+            ];
 
-                return $response->body();
+            foreach ($attempts as $attempt) {
+                Log::info("Trying: {$attempt['desc']} = '{$attempt['path']}'");
+
+                $response = Http::timeout(60)
+                    ->withHeaders([
+                        'Authorization' => 'Bearer '.$accessToken,
+                        'Dropbox-API-Arg' => json_encode([
+                            'url' => $sharedUrl,
+                            'path' => $attempt['path'],
+                        ]),
+                    ])
+                    ->withBody('', 'application/octet-stream')
+                    ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
+
+                if ($response->successful()) {
+                    $size = strlen($response->body());
+                    Log::info("✓ SUCCESS with {$attempt['desc']}! Size: {$size} bytes");
+
+                    return $response->body();
+                }
+
+                Log::info("✗ Failed with {$attempt['desc']}: ".$response->status());
             }
 
-            Log::info('Direct path failed, trying with metadata calculation...');
+            // Try method 2: Get metadata and calculate relative path
+            Log::info('All direct attempts failed, trying with metadata...');
 
             $metadata = $this->getSharedLinkMetadata($accessToken, $sharedUrl);
 
@@ -145,16 +164,15 @@ class DropboxApiService
 
             if (! empty($sharedLinkPath) && strpos($pathLower, $sharedLinkPath) === 0) {
                 $relativePath = substr($path, strlen($sharedLinkPath));
-                Log::info("Stripped shared link path, relative: {$relativePath}");
             }
 
             if (empty($relativePath)) {
                 $relativePath = '';
-            } elseif (strpos($relativePath, '/') !== 0) {
-                $relativePath = '/'.$relativePath;
+            } elseif (strpos($relativePath, '/') === 0) {
+                $relativePath = substr($relativePath, 1); // Remove leading slash
             }
 
-            Log::info("Final relative path: {$relativePath}");
+            Log::info("Calculated relative path (no slash): '{$relativePath}'");
 
             $response = Http::timeout(60)
                 ->withHeaders([
@@ -169,14 +187,14 @@ class DropboxApiService
 
             if ($response->successful()) {
                 $size = strlen($response->body());
-                Log::info("✓ Download successful (relative path)! Size: {$size} bytes");
+                Log::info("✓ SUCCESS with relative path! Size: {$size} bytes");
 
                 return $response->body();
             }
 
-            Log::error('✗ Download failed!');
-            Log::error('Status: '.$response->status());
-            Log::error('Response: '.$response->body());
+            Log::error('✗ ALL ATTEMPTS FAILED!');
+            Log::error('Final Status: '.$response->status());
+            Log::error('Final Response: '.$response->body());
 
             return null;
 

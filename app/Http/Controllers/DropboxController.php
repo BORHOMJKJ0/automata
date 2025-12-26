@@ -534,32 +534,32 @@ class DropboxController extends Controller
             $highestRow = $worksheet->getHighestRow();
             $manifestNumber = trim($pdfData['manifest_number']);
 
+            // Check if manifest already exists
             $foundRow = null;
             for ($row = 2; $row <= $highestRow; $row++) {
                 $cellValue = trim((string) $worksheet->getCell("A{$row}")->getValue());
                 if ($cellValue == $manifestNumber) {
                     $foundRow = $row;
-                    Log::info("Found existing row {$row} for manifest {$manifestNumber}");
-                    break;
+                    Log::info("⚠️ Manifest {$manifestNumber} already exists in row {$row} - SKIPPING");
+                    return false; // Don't add duplicate
                 }
             }
 
-            if (! $foundRow) {
-                $foundRow = $highestRow + 1;
-                Log::info("Creating new row {$foundRow} for manifest {$manifestNumber}");
-            }
+            // Add new row at the end
+            $foundRow = $highestRow + 1;
+            Log::info("✓ Creating new row {$foundRow} for manifest {$manifestNumber}");
 
-            $worksheet->setCellValue("A{$foundRow}", $pdfData['manifest_number']);
-            $worksheet->setCellValue("B{$foundRow}", $pdfData['manifest_date']);
-            $worksheet->setCellValue("C{$foundRow}", $pdfData['waste_description']);
-            $worksheet->setCellValue("D{$foundRow}", $pdfData['quantity']);
-            $worksheet->setCellValue("E{$foundRow}", $pdfData['wastes_location']);
-            $worksheet->setCellValue("F{$foundRow}", $pdfData['recycled_plastic']);
-            $worksheet->setCellValue("G{$foundRow}", $pdfData['recycled_paper']);
-            $worksheet->setCellValue("H{$foundRow}", $pdfData['recycled_wood']);
-            $worksheet->setCellValue("I{$foundRow}", $pdfData['recycled_steel']);
+            // Column mapping based on the Excel file structure
+            $worksheet->setCellValue("A{$foundRow}", $pdfData['manifest_number']);        // Manifest Number
+            $worksheet->setCellValue("B{$foundRow}", $pdfData['manifest_date']);          // Date
+            $worksheet->setCellValue("C{$foundRow}", $pdfData['waste_description']);      // Waste Description
+            $worksheet->setCellValue("D{$foundRow}", $pdfData['wastes_location']);        // Location
+            $worksheet->setCellValue("E{$foundRow}", $pdfData['recycled_plastic']);       // Plastic
+            $worksheet->setCellValue("F{$foundRow}", $pdfData['recycled_paper']);         // Paper
+            $worksheet->setCellValue("G{$foundRow}", $pdfData['recycled_wood']);          // Wood
+            $worksheet->setCellValue("H{$foundRow}", $pdfData['recycled_steel']);         // Steel
 
-            Log::info("Row {$foundRow} updated successfully");
+            Log::info("✓ Row {$foundRow} added successfully");
             return true;
         } catch (\Exception $e) {
             Log::error('Excel Update Error: '.$e->getMessage());

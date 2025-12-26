@@ -109,18 +109,45 @@ class DropboxApiService
             Log::info("Original path: {$path}");
             Log::info("Shared URL: {$sharedUrl}");
 
-            // Extract filename from path
-            $filename = basename($path);
-            Log::info("Filename: {$filename}");
+            // Get metadata first
+            $metadata = $this->getSharedLinkMetadata($accessToken, $sharedUrl);
 
-            // Try method 1: Direct with full path
-            $attempts = [
-                ['path' => $path, 'desc' => 'Full path'],
-                ['path' => '/'.$filename, 'desc' => 'Root + filename'],
-                ['path' => $filename, 'desc' => 'Filename only'],
-                ['path' => '', 'desc' => 'Empty path'],
-            ];
+            if (! $metadata) {
+                Log::error('Could not get shared link metadata');
 
+                return null;
+            }
+
+            $sharedLinkPath = $metadata['path_lower'] ?? '';
+            Log::info("Shared link root path: {$sharedLinkPath}");
+
+            // Calculate relative path
+            $pathLower = strtolower($path);
+            $relativePath = $path;
+
+            if (! empty($sharedLinkPath) && strpos($pathLower, $sharedLinkPath) === 0) {
+                $relativePath = substr($path, strlen($sharedLinkPath));
+            }
+
+            // Clean up the relative path
+            $relativePath = ltrim($relativePath, '/');
+
+            Log::info("Calculated relative path: '{$relativePath}'");
+
+            // Prepare attempts
+            $attempts = [];
+
+            if (! empty($relativePath)) {
+                $attempts[] = ['path' => '/'.$relativePath, 'desc' => 'With leading slash'];
+                $attempts[] = ['path' => $relativePath, 'desc' => 'Without leading slash'];
+            } else {
+                // File is in root of shared folder
+                $filename = basename($path);
+                $attempts[] = ['path' => $filename, 'desc' => 'Filename only'];
+                $attempts[] = ['path' => '/'.$filename, 'desc' => 'Filename with slash'];
+            }
+
+            // Try each attempt
             foreach ($attempts as $attempt) {
                 Log::info("Trying: {$attempt['desc']} = '{$attempt['path']}'");
 
@@ -142,65 +169,15 @@ class DropboxApiService
                     return $response->body();
                 }
 
-                Log::info("✗ Failed with {$attempt['desc']}: ".$response->status());
-            }
-
-            // Try method 2: Get metadata and calculate relative path
-            Log::info('All direct attempts failed, trying with metadata...');
-
-            $metadata = $this->getSharedLinkMetadata($accessToken, $sharedUrl);
-
-            if (! $metadata) {
-                Log::error('Could not get shared link metadata');
-
-                return null;
-            }
-
-            $sharedLinkPath = $metadata['path_lower'] ?? '';
-            Log::info("Shared link root path: {$sharedLinkPath}");
-
-            $pathLower = strtolower($path);
-            $relativePath = $path;
-
-            if (! empty($sharedLinkPath) && strpos($pathLower, $sharedLinkPath) === 0) {
-                $relativePath = substr($path, strlen($sharedLinkPath));
-            }
-
-            if (empty($relativePath)) {
-                $relativePath = '';
-            } elseif (strpos($relativePath, '/') === 0) {
-                $relativePath = substr($relativePath, 1); // Remove leading slash
-            }
-
-            Log::info("Calculated relative path (no slash): '{$relativePath}'");
-
-            $response = Http::timeout(60)
-                ->withHeaders([
-                    'Authorization' => 'Bearer '.$accessToken,
-                    'Dropbox-API-Arg' => json_encode([
-                        'url' => $sharedUrl,
-                        'path' => $relativePath,
-                    ]),
-                ])
-                ->withBody('', 'application/octet-stream')
-                ->post('https://content.dropboxapi.com/2/sharing/get_shared_link_file');
-
-            if ($response->successful()) {
-                $size = strlen($response->body());
-                Log::info("✓ SUCCESS with relative path! Size: {$size} bytes");
-
-                return $response->body();
+                Log::info("✗ Failed with {$attempt['desc']}: Status ".$response->status());
             }
 
             Log::error('✗ ALL ATTEMPTS FAILED!');
-            Log::error('Final Status: '.$response->status());
-            Log::error('Final Response: '.$response->body());
 
             return null;
 
         } catch (\Exception $e) {
             Log::error('Download exception: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
 
             return null;
         }

@@ -28,11 +28,7 @@ class ExcelProcessorService
         string $excelPath,
         array $matchingFiles
     ): array {
-        $excelContent = $this->dropboxApi->downloadFileContent(
-            $accessToken,
-            $sharedUrl,
-            $excelPath
-        );
+        $excelContent = $this->dropboxApi->downloadFileContent($accessToken, $sharedUrl, $excelPath);
 
         if (! $excelContent) {
             throw new \Exception('Failed to download Excel file');
@@ -43,28 +39,43 @@ class ExcelProcessorService
 
         $spreadsheet = IOFactory::load($tempExcelPath);
 
-        // ===== الحصول على الشيت الصحيح =====
-        $worksheet = $spreadsheet->getSheetByName('ManifestDetails (2)')
-            ?? $spreadsheet->getActiveSheet();
-
-        Log::info('Using sheet: '.$worksheet->getTitle());
+        try {
+            $worksheet = $spreadsheet->getSheetByName('ManifestDetails (2)');
+            if (! $worksheet) {
+                Log::warning("Sheet 'ManifestDetails (2)' not found, trying by index...");
+                if ($spreadsheet->getSheetCount() > 1) {
+                    $worksheet = $spreadsheet->getSheet(1);
+                    Log::info('Using sheet: '.$worksheet->getTitle());
+                } else {
+                    $worksheet = $spreadsheet->getActiveSheet();
+                    Log::info('Using active sheet: '.$worksheet->getTitle());
+                }
+            } else {
+                Log::info('Using sheet: ManifestDetails (2)');
+            }
+        } catch (\Exception $e) {
+            Log::error('Error getting worksheet: '.$e->getMessage());
+            $worksheet = $spreadsheet->getActiveSheet();
+        }
 
         $updatedCount = 0;
         $processedFiles = [];
 
+        Log::info('Processing '.count($matchingFiles).' files...');
+
         foreach ($matchingFiles as $file) {
+            Log::info("=== Processing file: {$file['name']} ===");
 
             if (! str_ends_with(strtolower($file['name']), '.pdf')) {
+                Log::info('Skipping non-PDF file');
+
                 continue;
             }
 
-            $pdfContent = $this->dropboxApi->downloadFileContent(
-                $accessToken,
-                $sharedUrl,
-                $file['path']
-            );
+            $pdfContent = $this->dropboxApi->downloadFileContent($accessToken, $sharedUrl, $file['path']);
 
             if (! $pdfContent) {
+                Log::error("Failed to download PDF: {$file['name']}");
                 $processedFiles[] = [
                     'name' => $file['name'],
                     'status' => 'error',
@@ -74,52 +85,74 @@ class ExcelProcessorService
                 continue;
             }
 
+            Log::info('PDF downloaded, size: '.strlen($pdfContent).' bytes');
+            Log::info('Extracting PDF data...');
+
             $pdfData = $this->pdfParser->extractPdfData($pdfContent);
 
-            if (
-                ! $pdfData ||
-                empty($pdfData['manifest_number']) ||
-                $pdfData['manifest_number'] === 'Not Found'
-            ) {
+            if (! $pdfData) {
+                Log::error("extractPdfData returned NULL for {$file['name']}");
                 $processedFiles[] = [
                     'name' => $file['name'],
-                    'status' => 'warning',
-                    'message' => 'No valid data found',
+                    'status' => 'error',
+                    'message' => 'Failed to extract PDF data (returned null)',
                 ];
 
                 continue;
             }
 
+            Log::info('PDF Data extracted: '.json_encode($pdfData));
+
+            if ($pdfData['manifest_number'] === 'Not Found' || empty($pdfData['manifest_number'])) {
+                Log::warning("No valid manifest number found in {$file['name']}");
+                $processedFiles[] = [
+                    'name' => $file['name'],
+                    'status' => 'warning',
+                    'message' => 'No valid manifest number found',
+                ];
+
+                continue;
+            }
+
+            Log::info("Calling updateExcelRow for manifest: {$pdfData['manifest_number']}");
+
             $updated = $this->updateExcelRow($worksheet, $pdfData);
 
             if ($updated) {
                 $updatedCount++;
+                Log::info("✓ Successfully updated Excel with {$file['name']}");
                 $processedFiles[] = [
                     'name' => $file['name'],
                     'status' => 'success',
                     'manifest' => $pdfData['manifest_number'],
                 ];
             } else {
+                Log::warning("updateExcelRow returned false for {$file['name']}");
                 $processedFiles[] = [
                     'name' => $file['name'],
                     'status' => 'skipped',
-                    'message' => 'Duplicate manifest number',
+                    'message' => 'Duplicate or update failed',
                 ];
             }
         }
 
+        Log::info('=== Processing Complete ===');
+        Log::info('Total files processed: '.count($matchingFiles));
+        Log::info("Successfully updated: {$updatedCount}");
+
         $writer = new Xlsx($spreadsheet);
         $writer->save($tempExcelPath);
-
         $updatedContent = file_get_contents($tempExcelPath);
         unlink($tempExcelPath);
 
-        $uploaded = $this->dropboxApi->uploadFile(
-            $accessToken,
-            $excelPath,
-            $updatedContent,
-            true
-        );
+        Log::info('Uploading updated Excel file...');
+        $uploaded = $this->dropboxApi->uploadFile($accessToken, $excelPath, $updatedContent, true);
+
+        if ($uploaded) {
+            Log::info('✓ Excel file uploaded successfully');
+        } else {
+            Log::error('✗ Failed to upload Excel file');
+        }
 
         return [
             'success' => $uploaded,

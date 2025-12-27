@@ -1,0 +1,22 @@
+{
+    "sourceFile": "api/vercel.json",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1766879415049,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1766879475523,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,9 +1,9 @@\n {\n     \"version\": 2,\n       \"framework\": null,\n     \"functions\": {\n-        \"api/index.php\": { \"runtime\": \"vercel-php@0.6.0\" }\n+        \"api/index.php\": { \"runtime\": \"vercel-php@0.7.4\" }\n     },\n     \"routes\": [{\n         \"src\": \"/(.*)\",\n         \"dest\": \"/api/index.php\"\n"
+                }
+            ],
+            "date": 1766879415049,
+            "name": "Commit-0",
+            "content": "{\n    \"version\": 2,\n      \"framework\": null,\n    \"functions\": {\n        \"api/index.php\": { \"runtime\": \"vercel-php@0.6.0\" }\n    },\n    \"routes\": [{\n        \"src\": \"/(.*)\",\n        \"dest\": \"/api/index.php\"\n    }],\n    \"env\": {\n        \"APP_ENV\": \"production\",\n        \"APP_DEBUG\": \"true\",\n        \"APP_URL\": \"https://yourprojectdomain.com\",\n\n        \"APP_CONFIG_CACHE\": \"/tmp/config.php\",\n        \"APP_EVENTS_CACHE\": \"/tmp/events.php\",\n        \"APP_PACKAGES_CACHE\": \"/tmp/packages.php\",\n        \"APP_ROUTES_CACHE\": \"/tmp/routes.php\",\n        \"APP_SERVICES_CACHE\": \"/tmp/services.php\",\n        \"VIEW_COMPILED_PATH\": \"/tmp\",\n\n        \"CACHE_DRIVER\": \"array\",\n        \"LOG_CHANNEL\": \"stderr\",\n        \"SESSION_DRIVER\": \"cookie\"\n    }\n}\n"
+        }
+    ]
+}

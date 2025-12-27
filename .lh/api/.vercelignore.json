@@ -1,0 +1,18 @@
+{
+    "sourceFile": "api/.vercelignore",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1766879398099,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1766879398099,
+            "name": "Commit-0",
+            "content": "/vendor\n"
+        }
+    ]
+}

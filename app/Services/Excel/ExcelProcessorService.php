@@ -34,7 +34,7 @@ class ExcelProcessorService
             throw new \Exception('Failed to download Excel file');
         }
 
-        $tempExcelPath = tempnam(sys_get_temp_dir(), 'excel_').'.xlsx';
+        $tempExcelPath = tempnam(sys_get_temp_dir(), 'excel_') . '.xlsx';
         file_put_contents($tempExcelPath, $excelContent);
 
         $spreadsheet = IOFactory::load($tempExcelPath);
@@ -45,23 +45,23 @@ class ExcelProcessorService
                 Log::warning("Sheet 'ManifestDetails (2)' not found, trying by index...");
                 if ($spreadsheet->getSheetCount() > 1) {
                     $worksheet = $spreadsheet->getSheet(1);
-                    Log::info('Using sheet: '.$worksheet->getTitle());
+                    Log::info('Using sheet: ' . $worksheet->getTitle());
                 } else {
                     $worksheet = $spreadsheet->getActiveSheet();
-                    Log::info('Using active sheet: '.$worksheet->getTitle());
+                    Log::info('Using active sheet: ' . $worksheet->getTitle());
                 }
             } else {
                 Log::info('Using sheet: ManifestDetails (2)');
             }
         } catch (\Exception $e) {
-            Log::error('Error getting worksheet: '.$e->getMessage());
+            Log::error('Error getting worksheet: ' . $e->getMessage());
             $worksheet = $spreadsheet->getActiveSheet();
         }
 
         $updatedCount = 0;
         $processedFiles = [];
 
-        Log::info('Processing '.count($matchingFiles).' files...');
+        Log::info('Processing ' . count($matchingFiles) . ' files...');
 
         foreach ($matchingFiles as $file) {
             Log::info("=== Processing file: {$file['name']} ===");
@@ -85,7 +85,7 @@ class ExcelProcessorService
                 continue;
             }
 
-            Log::info('PDF downloaded, size: '.strlen($pdfContent).' bytes');
+            Log::info('PDF downloaded, size: ' . strlen($pdfContent) . ' bytes');
             Log::info('Extracting PDF data...');
 
             $pdfData = $this->pdfParser->extractPdfData($pdfContent);
@@ -101,7 +101,7 @@ class ExcelProcessorService
                 continue;
             }
 
-            Log::info('PDF Data extracted: '.json_encode($pdfData));
+            Log::info('PDF Data extracted: ' . json_encode($pdfData));
 
             if ($pdfData['manifest_number'] === 'Not Found' || empty($pdfData['manifest_number'])) {
                 Log::warning("No valid manifest number found in {$file['name']}");
@@ -137,7 +137,7 @@ class ExcelProcessorService
         }
 
         Log::info('=== Processing Complete ===');
-        Log::info('Total files processed: '.count($matchingFiles));
+        Log::info('Total files processed: ' . count($matchingFiles));
         Log::info("Successfully updated: {$updatedCount}");
 
         $writer = new Xlsx($spreadsheet);
@@ -215,9 +215,11 @@ class ExcelProcessorService
                     $cellC = trim((string) $worksheet->getCell("C{$row}")->getValue());
 
                     // Look for header indicators
-                    if (stripos($cellA.$cellB.$cellC, 'Manifest') !== false ||
-                        stripos($cellA.$cellB.$cellC, 'Number') !== false ||
-                        stripos($cellA.$cellB.$cellC, 'Date') !== false) {
+                    if (
+                        stripos($cellA . $cellB . $cellC, 'Manifest') !== false ||
+                        stripos($cellA . $cellB . $cellC, 'Number') !== false ||
+                        stripos($cellA . $cellB . $cellC, 'Date') !== false
+                    ) {
                         $lastDataRow = $row;
                         Log::info("Found header-like row at {$row}, will add data after it");
                         break;
@@ -266,14 +268,13 @@ class ExcelProcessorService
 
             Log::info("✅ SUCCESS! Row {$newRow} added");
             Log::info("   A: {$verifyA}");
-            Log::info('   B: '.$worksheet->getCell("B{$newRow}")->getValue());
-            Log::info('   C: '.$worksheet->getCell("C{$newRow}")->getValue());
-            Log::info('   J: '.$worksheet->getCell("J{$newRow}")->getValue());
+            Log::info('   B: ' . $worksheet->getCell("B{$newRow}")->getValue());
+            Log::info('   C: ' . $worksheet->getCell("C{$newRow}")->getValue());
+            Log::info('   J: ' . $worksheet->getCell("J{$newRow}")->getValue());
 
             return true;
-
         } catch (\Exception $e) {
-            Log::error('Excel Update Error: '.$e->getMessage());
+            Log::error('Excel Update Error: ' . $e->getMessage());
             Log::error($e->getTraceAsString());
 
             return false;

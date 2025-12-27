@@ -10,12 +10,16 @@ class DropboxApiService
     public function getSharedLinkMetadata(string $accessToken, string $sharedUrl): ?array
     {
         try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer '.$accessToken,
-                'Content-Type' => 'application/json',
-            ])->post('https://api.dropboxapi.com/2/sharing/get_shared_link_metadata', [
-                'url' => $sharedUrl,
-            ]);
+            // ===== INCREASED TIMEOUT for metadata =====
+            $response = Http::timeout(30)
+                ->connectTimeout(15)
+                ->retry(2, 1000)
+                ->withHeaders([
+                    'Authorization' => 'Bearer '.$accessToken,
+                    'Content-Type' => 'application/json',
+                ])->post('https://api.dropboxapi.com/2/sharing/get_shared_link_metadata', [
+                    'url' => $sharedUrl,
+                ]);
 
             return $response->successful() ? $response->json() : null;
         } catch (\Exception $e) {
@@ -102,6 +106,7 @@ class DropboxApiService
         return $allEntries;
     }
 
+    // في DropboxApiService.php
     public function downloadFileContent(string $accessToken, string $sharedUrl, string $path): ?string
     {
         try {
@@ -109,7 +114,7 @@ class DropboxApiService
             Log::info("Original path: {$path}");
             Log::info("Shared URL: {$sharedUrl}");
 
-            // Get metadata first
+            // Get metadata first with longer timeout
             $metadata = $this->getSharedLinkMetadata($accessToken, $sharedUrl);
 
             if (! $metadata) {
@@ -121,7 +126,6 @@ class DropboxApiService
             $sharedLinkPath = $metadata['path_lower'] ?? '';
             Log::info("Shared link root path: {$sharedLinkPath}");
 
-            // Calculate relative path
             $pathLower = strtolower($path);
             $relativePath = $path;
 
@@ -129,29 +133,28 @@ class DropboxApiService
                 $relativePath = substr($path, strlen($sharedLinkPath));
             }
 
-            // Clean up the relative path
             $relativePath = ltrim($relativePath, '/');
 
             Log::info("Calculated relative path: '{$relativePath}'");
 
-            // Prepare attempts
             $attempts = [];
 
             if (! empty($relativePath)) {
                 $attempts[] = ['path' => '/'.$relativePath, 'desc' => 'With leading slash'];
                 $attempts[] = ['path' => $relativePath, 'desc' => 'Without leading slash'];
             } else {
-                // File is in root of shared folder
                 $filename = basename($path);
                 $attempts[] = ['path' => $filename, 'desc' => 'Filename only'];
                 $attempts[] = ['path' => '/'.$filename, 'desc' => 'Filename with slash'];
             }
 
-            // Try each attempt
             foreach ($attempts as $attempt) {
                 Log::info("Trying: {$attempt['desc']} = '{$attempt['path']}'");
 
-                $response = Http::timeout(60)
+                // ===== INCREASED TIMEOUT to 120 seconds =====
+                $response = Http::timeout(120)
+                    ->connectTimeout(30)
+                    ->retry(2, 1000) // Retry 2 times with 1 second delay
                     ->withHeaders([
                         'Authorization' => 'Bearer '.$accessToken,
                         'Dropbox-API-Arg' => json_encode([

@@ -164,103 +164,117 @@ class ExcelProcessorService
     private function updateExcelRow($worksheet, array $pdfData): bool
     {
         try {
-            $highestRow = $worksheet->getHighestRow();
             $manifestNumber = trim($pdfData['manifest_number']);
 
             Log::info('=== Updating Excel ===');
-            Log::info('Sheet: '.$worksheet->getTitle());
-            Log::info("Highest Row: {$highestRow}");
-            Log::info("Checking Manifest: {$manifestNumber}");
+            Log::info("Looking for Manifest: {$manifestNumber}");
 
-            // ===== التحسين 1: التحقق أن الـ manifest number صالح =====
             if (empty($manifestNumber) || $manifestNumber === 'Not Found') {
-                Log::error("Invalid manifest number: '{$manifestNumber}' - SKIPPING");
+                Log::error('Invalid manifest number - SKIPPING');
 
                 return false;
             }
 
-            // Find where data starts
-            $dataStartRow = null;
+            // ===== STEP 1: Check for duplicates in ENTIRE sheet =====
+            $highestRow = $worksheet->getHighestDataRow();
+
+            Log::info("Checking for duplicates in {$highestRow} rows...");
+
             for ($row = 1; $row <= $highestRow; $row++) {
                 $cellA = trim((string) $worksheet->getCell("A{$row}")->getValue());
 
-                if (is_numeric($cellA) && strlen($cellA) >= 6) {
-                    $dataStartRow = $row;
-                    Log::info("Found data start at row {$row}");
-                    break;
-                }
-            }
-
-            if (! $dataStartRow) {
-                Log::warning('Could not find data start row, using row 2 as default');
-                $dataStartRow = 2; // استخدم السطر 2 كافتراضي
-            }
-
-            // ===== التحسين 2: فحص أكثر دقة للتكرار =====
-            Log::info("Checking for duplicates from row {$dataStartRow} to {$highestRow}...");
-
-            for ($row = $dataStartRow; $row <= $highestRow; $row++) {
-                $cellValue = trim((string) $worksheet->getCell("A{$row}")->getValue());
-
-                // تحويل كلاهما لنفس النوع للمقارنة
-                $cellValue = (string) $cellValue;
-                $manifestNumber = (string) $manifestNumber;
-
-                if ($cellValue === $manifestNumber) {
-                    Log::warning('⚠️ DUPLICATE FOUND!');
-                    Log::warning("Manifest {$manifestNumber} already exists in row {$row}");
-                    Log::warning("Existing data in row {$row}:");
-                    Log::warning('  A: '.$worksheet->getCell("A{$row}")->getValue());
-                    Log::warning('  B: '.$worksheet->getCell("B{$row}")->getValue());
-                    Log::warning('  C: '.$worksheet->getCell("C{$row}")->getValue());
-                    Log::warning('SKIPPING this PDF to prevent duplicate entry.');
+                // If manifest number exists, SKIP
+                if ($cellA === $manifestNumber) {
+                    Log::warning("⚠️ DUPLICATE FOUND! Manifest {$manifestNumber} already exists in row {$row}");
+                    Log::warning('SKIPPING - Will not add duplicate entry');
 
                     return false;
                 }
             }
 
-            Log::info('✓ No duplicates found, proceeding to add new row...');
+            Log::info("✓ No duplicate found, manifest {$manifestNumber} is unique");
 
-            // Add new row
-            $newRow = $highestRow + 1;
+            // ===== STEP 2: Find where to insert (after last data row) =====
+            $lastDataRow = null;
 
-            Log::info("Adding new row at: {$newRow}");
+            // Scan to find last row with actual manifest data
+            for ($row = 1; $row <= $highestRow; $row++) {
+                $cellA = trim((string) $worksheet->getCell("A{$row}")->getValue());
 
-            // ===== الترتيب الصحيح حسب الصورة =====
-            $worksheet->setCellValue("A{$newRow}", $pdfData['manifest_number']);        // Manifest Number
-            $worksheet->setCellValue("B{$newRow}", $pdfData['manifest_date']);          // Manifest Date
-            $worksheet->setCellValue("C{$newRow}", $pdfData['waste_description']);      // Waste Description
-            $worksheet->setCellValue("D{$newRow}", $pdfData['quantity']);               // General Waste Quantity
-            $worksheet->setCellValue("E{$newRow}", $pdfData['recycled_steel']);         // Recycled Steel
-            $worksheet->setCellValue("F{$newRow}", 0);                                  // Recycled Concrete
-            $worksheet->setCellValue("G{$newRow}", $pdfData['recycled_wood']);          // Recycled Wood
-            $worksheet->setCellValue("H{$newRow}", $pdfData['recycled_paper']);         // Recycled Paper & CB
-            $worksheet->setCellValue("I{$newRow}", $pdfData['recycled_plastic']);       // Recycled Plastic
-            $worksheet->setCellValue("J{$newRow}", $pdfData['wastes_location']);        // Wastes Location
+                // Check if this is a data row (numeric manifest number)
+                if (! empty($cellA) && is_numeric($cellA) && strlen($cellA) >= 6) {
+                    $lastDataRow = $row;
+                }
+            }
 
-            // ===== التحسين 3: التحقق المزدوج بعد الإضافة =====
-            $verifyA = $worksheet->getCell("A{$newRow}")->getValue();
-            $verifyB = $worksheet->getCell("B{$newRow}")->getValue();
-            $verifyC = $worksheet->getCell("C{$newRow}")->getValue();
-            $verifyJ = $worksheet->getCell("J{$newRow}")->getValue();
+            if (! $lastDataRow) {
+                // No data found, look for header row and add after it
+                for ($row = 1; $row <= 20; $row++) {
+                    $cellA = trim((string) $worksheet->getCell("A{$row}")->getValue());
+                    $cellB = trim((string) $worksheet->getCell("B{$row}")->getValue());
+                    $cellC = trim((string) $worksheet->getCell("C{$row}")->getValue());
 
-            if (empty($verifyA)) {
-                Log::error("Failed to write data! Cell A{$newRow} is empty.");
+                    // Look for header indicators
+                    if (stripos($cellA.$cellB.$cellC, 'Manifest') !== false ||
+                        stripos($cellA.$cellB.$cellC, 'Number') !== false ||
+                        stripos($cellA.$cellB.$cellC, 'Date') !== false) {
+                        $lastDataRow = $row;
+                        Log::info("Found header-like row at {$row}, will add data after it");
+                        break;
+                    }
+                }
+            }
+
+            if (! $lastDataRow) {
+                Log::error('Could not determine where to insert data!');
 
                 return false;
             }
 
-            Log::info("✓✓✓ Row {$newRow} added successfully!");
-            Log::info('Written data verification:');
-            Log::info("  A (Manifest): {$verifyA}");
-            Log::info("  B (Date): {$verifyB}");
-            Log::info("  C (Description): {$verifyC}");
-            Log::info("  J (Location): {$verifyJ}");
+            // ===== STEP 3: Insert at next row =====
+            $newRow = $lastDataRow + 1;
+
+            Log::info("Inserting new data at row: {$newRow}");
+
+            // Clean waste description - keep only the type
+            $wasteDesc = $pdfData['waste_description'];
+            $wasteDesc = preg_replace('/\s+(Solid|Liquid|Gas)\s+.*/i', '', $wasteDesc);
+            $wasteDesc = str_replace(["\t", "\r", "\n"], ' ', $wasteDesc);
+            $wasteDesc = preg_replace('/\s+/', ' ', $wasteDesc);
+            $wasteDesc = trim($wasteDesc);
+
+            // Write data - EXACT column mapping from your image
+            $worksheet->setCellValue("A{$newRow}", $manifestNumber);                   // Manifest Number
+            $worksheet->setCellValue("B{$newRow}", $pdfData['manifest_date']);        // Manifest Date
+            $worksheet->setCellValue("C{$newRow}", $wasteDesc);                       // Waste Description
+            $worksheet->setCellValue("D{$newRow}", $pdfData['quantity']);             // General Waste Quantity
+            $worksheet->setCellValue("E{$newRow}", $pdfData['recycled_steel']);       // Recycled Steel
+            $worksheet->setCellValue("F{$newRow}", 0);                                // Recycled Concrete
+            $worksheet->setCellValue("G{$newRow}", $pdfData['recycled_wood']);        // Recycled Wood
+            $worksheet->setCellValue("H{$newRow}", $pdfData['recycled_paper']);       // Recycled Paper & CB
+            $worksheet->setCellValue("I{$newRow}", $pdfData['recycled_plastic']);     // Recycled Plastic
+            $worksheet->setCellValue("J{$newRow}", $pdfData['wastes_location']);      // Wastes Location
+
+            // ===== STEP 4: Verify data was written =====
+            $verifyA = $worksheet->getCell("A{$newRow}")->getValue();
+
+            if (empty($verifyA)) {
+                Log::error("❌ FAILED! Data was not written to row {$newRow}");
+
+                return false;
+            }
+
+            Log::info("✅ SUCCESS! Row {$newRow} added");
+            Log::info("   A: {$verifyA}");
+            Log::info('   B: '.$worksheet->getCell("B{$newRow}")->getValue());
+            Log::info('   C: '.$worksheet->getCell("C{$newRow}")->getValue());
+            Log::info('   J: '.$worksheet->getCell("J{$newRow}")->getValue());
 
             return true;
+
         } catch (\Exception $e) {
             Log::error('Excel Update Error: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
+            Log::error($e->getTraceAsString());
 
             return false;
         }

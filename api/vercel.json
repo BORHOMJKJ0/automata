@@ -2,7 +2,7 @@
     "version": 2,
     "framework": null,
     "functions": {
-        "api/*.php": {
+        "api/index.php": {
             "runtime": "vercel-php@0.7.4",
             "maxDuration": 30
         }
@@ -21,8 +21,20 @@
             "dest": "/public/build/$1"
         },
         {
-            "src": "/(css|js|images|fonts|storage)/(.*)",
-            "dest": "/public/$1/$2"
+            "src": "/css/(.*)",
+            "dest": "/public/css/$1"
+        },
+        {
+            "src": "/js/(.*)",
+            "dest": "/public/js/$1"
+        },
+        {
+            "src": "/images/(.*)",
+            "dest": "/public/images/$1"
+        },
+        {
+            "src": "/storage/(.*)",
+            "dest": "/public/storage/$1"
         },
         {
             "src": "/(.*)",
@@ -45,10 +57,9 @@
         "LOG_CHANNEL": "stderr",
         "SESSION_DRIVER": "cookie",
         "SESSION_LIFETIME": "120",
-        "SESSION_ENCRYPT": "false",
         "SESSION_SECURE_COOKIE": "true",
-        "SESSION_SAME_SITE": "lax",
 
-        "FILESYSTEM_DISK": "local"
+        "FILESYSTEM_DISK": "local",
+        "QUEUE_CONNECTION": "sync"
     }
 }

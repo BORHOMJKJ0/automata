@@ -1,0 +1,18 @@
+{
+    "sourceFile": "bootstrap/app.php",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1766956244706,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1766956244706,
+            "name": "Commit-0",
+            "content": "<?php\n\n// api/index.php - For Laravel 10 and below\n\n// Set correct paths for Vercel\n$_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/../public/index.php';\n$_SERVER['SCRIPT_NAME'] = '/index.php';\n$_SERVER['PHP_SELF'] = '/index.php';\n$_SERVER['DOCUMENT_ROOT'] = __DIR__ . '/../public';\n\n// Change to project root\nchdir(__DIR__ . '/..');\n\n// Load composer autoload\nrequire __DIR__ . '/../vendor/autoload.php';\n\n// Bootstrap Laravel application\n$app = require_once __DIR__ . '/../bootstrap/app.php';\n\n// Create kernel and handle request\n$kernel = $app->make(Illuminate\\Contracts\\Http\\Kernel::class);\n\n$response = $kernel->handle(\n    $request = Illuminate\\Http\\Request::capture()\n);\n\n$response->send();\n\n$kernel->terminate($request, $response);\n"
+        }
+    ]
+}

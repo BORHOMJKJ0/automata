@@ -9,6 +9,14 @@
     },
     "routes": [
         {
+            "src": "/favicon.ico",
+            "dest": "/public/favicon.ico"
+        },
+        {
+            "src": "/robots.txt",
+            "dest": "/public/robots.txt"
+        },
+        {
             "src": "/(css|js|images|fonts|build|storage)/(.*)",
             "dest": "/public/$1/$2"
         },
@@ -19,7 +27,7 @@
     ],
     "env": {
         "APP_ENV": "production",
-        "APP_DEBUG": "true",
+        "APP_DEBUG": "false",
         "APP_URL": "https://automata-mu.vercel.app",
 
         "APP_CONFIG_CACHE": "/tmp/config.php",
@@ -31,6 +39,9 @@
 
         "CACHE_DRIVER": "array",
         "LOG_CHANNEL": "stderr",
-        "SESSION_DRIVER": "array"
+        "SESSION_DRIVER": "cookie",
+        "SESSION_LIFETIME": "120",
+        "SESSION_SECURE_COOKIE": "true",
+        "SESSION_SAME_SITE": "lax"
     }
 }

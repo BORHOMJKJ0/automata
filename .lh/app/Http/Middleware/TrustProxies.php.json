@@ -1,0 +1,26 @@
+{
+    "sourceFile": "app/Http/Middleware/TrustProxies.php",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 2,
+            "patches": [
+                {
+                    "date": 1766962714422,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1766962720305,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,19 +1,19 @@\n <?php\n \n namespace App\\Http\\Middleware;\n \n-use Illuminate\\Http\\Middleware\\TrustHosts as Middleware;\n+use Illuminate\\Http\\Middleware\\TrustProxies as Middleware;\n use Illuminate\\Http\\Request;\n \n-class TrustHosts extends Middleware\n+class TrustProxies extends Middleware\n {\n     /**\n      * The trusted proxies for this application.\n      *\n      * @var array<int, string>|string|null\n      */\n-    protected $proxies = '*'; // ← مهم لـ Vercel\n+    protected $proxies;\n \n     /**\n      * The headers that should be used to detect proxies.\n      *\n@@ -24,16 +24,5 @@\n         Request::HEADER_X_FORWARDED_HOST |\n         Request::HEADER_X_FORWARDED_PORT |\n         Request::HEADER_X_FORWARDED_PROTO |\n         Request::HEADER_X_FORWARDED_AWS_ELB;\n-    /**\n-     * Get the host patterns that should be trusted.\n-     *\n-     * @return array<int, string|null>\n-     */\n-    public function hosts(): array\n-    {\n-        return [\n-            $this->allSubdomainsOfApplicationUrl(),\n-        ];\n-    }\n }\n\\ No newline at end of file\n"
+                },
+                {
+                    "date": 1766962727145,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -11,9 +11,9 @@\n      * The trusted proxies for this application.\n      *\n      * @var array<int, string>|string|null\n      */\n-    protected $proxies;\n+    protected $proxies = '*';\n \n     /**\n      * The headers that should be used to detect proxies.\n      *\n@@ -24,5 +24,5 @@\n         Request::HEADER_X_FORWARDED_HOST |\n         Request::HEADER_X_FORWARDED_PORT |\n         Request::HEADER_X_FORWARDED_PROTO |\n         Request::HEADER_X_FORWARDED_AWS_ELB;\n-}\n\\ No newline at end of file\n+}\n"
+                }
+            ],
+            "date": 1766962714422,
+            "name": "Commit-0",
+            "content": "<?php\n\nnamespace App\\Http\\Middleware;\n\nuse Illuminate\\Http\\Middleware\\TrustHosts as Middleware;\nuse Illuminate\\Http\\Request;\n\nclass TrustHosts extends Middleware\n{\n    /**\n     * The trusted proxies for this application.\n     *\n     * @var array<int, string>|string|null\n     */\n    protected $proxies = '*'; // ← مهم لـ Vercel\n\n    /**\n     * The headers that should be used to detect proxies.\n     *\n     * @var int\n     */\n    protected $headers =\n        Request::HEADER_X_FORWARDED_FOR |\n        Request::HEADER_X_FORWARDED_HOST |\n        Request::HEADER_X_FORWARDED_PORT |\n        Request::HEADER_X_FORWARDED_PROTO |\n        Request::HEADER_X_FORWARDED_AWS_ELB;\n    /**\n     * Get the host patterns that should be trusted.\n     *\n     * @return array<int, string|null>\n     */\n    public function hosts(): array\n    {\n        return [\n            $this->allSubdomainsOfApplicationUrl(),\n        ];\n    }\n}"
+        }
+    ]
+}

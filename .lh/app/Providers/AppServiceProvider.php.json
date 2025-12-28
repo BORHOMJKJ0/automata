@@ -1,0 +1,18 @@
+{
+    "sourceFile": "app/Providers/AppServiceProvider.php",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1766962545265,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1766962545265,
+            "name": "Commit-0",
+            "content": "<?php\n\nnamespace App\\Providers;\n\nuse Illuminate\\Support\\ServiceProvider;\nuse Illuminate\\Support\\Facades\\URL;\n\nclass AppServiceProvider extends ServiceProvider\n{\n    /**\n     * Register any application services.\n     */\n    public function register(): void\n    {\n        //\n    }\n\n    /**\n     * Bootstrap any application services.\n     */\n    public function boot(): void\n    {\n        // فرض HTTPS في Production\n        if ($this->app->environment('production')) {\n            URL::forceScheme('https');\n        }\n\n        // إصلاح Trusted Proxies لـ Vercel\n        $this->app['request']->server->set('HTTPS', 'on');\n    }\n}"
+        }
+    ]
+}

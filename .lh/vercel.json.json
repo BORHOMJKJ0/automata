@@ -1,0 +1,18 @@
+{
+    "sourceFile": "vercel.json",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1766962616195,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1766962616195,
+            "name": "Commit-0",
+            "content": "{\n    \"version\": 2,\n    \"framework\": null,\n    \"functions\": {\n        \"api/index.php\": {\n            \"runtime\": \"vercel-php@0.7.4\",\n            \"maxDuration\": 30\n        }\n    },\n    \"routes\": [\n        {\n            \"src\": \"/favicon.ico\",\n            \"dest\": \"/public/favicon.ico\"\n        },\n        {\n            \"src\": \"/robots.txt\",\n            \"dest\": \"/public/robots.txt\"\n        },\n        {\n            \"src\": \"/(css|js|images|fonts|build|storage)/(.*)\",\n            \"dest\": \"/public/$1/$2\"\n        },\n        {\n            \"src\": \"/(.*)\",\n            \"dest\": \"/api/index.php\"\n        }\n    ],\n    \"env\": {\n        \"APP_ENV\": \"production\",\n        \"APP_DEBUG\": \"false\",\n        \"APP_URL\": \"https://automata-mu.vercel.app\",\n\n        \"APP_CONFIG_CACHE\": \"/tmp/config.php\",\n        \"APP_EVENTS_CACHE\": \"/tmp/events.php\",\n        \"APP_PACKAGES_CACHE\": \"/tmp/packages.php\",\n        \"APP_ROUTES_CACHE\": \"/tmp/routes.php\",\n        \"APP_SERVICES_CACHE\": \"/tmp/services.php\",\n        \"VIEW_COMPILED_PATH\": \"/tmp/views\",\n\n        \"CACHE_DRIVER\": \"array\",\n        \"LOG_CHANNEL\": \"stderr\",\n        \"SESSION_DRIVER\": \"cookie\",\n        \"SESSION_LIFETIME\": \"120\",\n        \"SESSION_SECURE_COOKIE\": \"true\",\n        \"SESSION_SAME_SITE\": \"lax\"\n    }\n}\n"
+        }
+    ]
+}

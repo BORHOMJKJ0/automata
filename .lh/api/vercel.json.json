@@ -3,7 +3,7 @@
     "activeCommit": 0,
     "commits": [
         {
-            "activePatchIndex": 2,
+            "activePatchIndex": 3,
             "patches": [
                 {
                     "date": 1766879415049,
@@ -16,6 +16,10 @@
                 {
                     "date": 1766955012437,
                     "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,27 +1,41 @@\n {\n     \"version\": 2,\n-      \"framework\": null,\n+    \"framework\": null,\n     \"functions\": {\n-        \"api/index.php\": { \"runtime\": \"vercel-php@0.7.4\" }\n+        \"api/index.php\": {\n+            \"runtime\": \"vercel-php@0.7.4\",\n+            \"maxDuration\": 10\n+        }\n     },\n-    \"routes\": [{\n-        \"src\": \"/(.*)\",\n-        \"dest\": \"/api/index.php\"\n-    }],\n+    \"routes\": [\n+        {\n+            \"src\": \"/build/(.*)\",\n+            \"dest\": \"/public/build/$1\"\n+        },\n+        {\n+            \"src\": \"/(css|js|images|storage)/(.*)\",\n+            \"dest\": \"/public/$1/$2\"\n+        },\n+        {\n+            \"src\": \"/(.*)\",\n+            \"dest\": \"/api/index.php\"\n+        }\n+    ],\n     \"env\": {\n         \"APP_ENV\": \"production\",\n-        \"APP_DEBUG\": \"true\",\n-        \"APP_URL\": \"https://yourprojectdomain.com\",\n+        \"APP_DEBUG\": \"false\",\n+        \"APP_URL\": \"https://automata-mu.vercel.app\",\n \n         \"APP_CONFIG_CACHE\": \"/tmp/config.php\",\n         \"APP_EVENTS_CACHE\": \"/tmp/events.php\",\n         \"APP_PACKAGES_CACHE\": \"/tmp/packages.php\",\n         \"APP_ROUTES_CACHE\": \"/tmp/routes.php\",\n         \"APP_SERVICES_CACHE\": \"/tmp/services.php\",\n-        \"VIEW_COMPILED_PATH\": \"/tmp\",\n-\n+        \"VIEW_COMPILED_PATH\": \"/tmp/views\",\n         \"CACHE_DRIVER\": \"array\",\n         \"LOG_CHANNEL\": \"stderr\",\n-        \"SESSION_DRIVER\": \"cookie\"\n+        \"SESSION_DRIVER\": \"cookie\",\n+        \"SESSION_LIFETIME\": \"120\",\n+        \"SESSION_SECURE_COOKIE\": \"true\"\n     }\n }\n"
+                },
+                {
+                    "date": 1766955823980,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,20 +1,28 @@\n {\n     \"version\": 2,\n     \"framework\": null,\n     \"functions\": {\n-        \"api/index.php\": {\n+        \"api/*.php\": {\n             \"runtime\": \"vercel-php@0.7.4\",\n-            \"maxDuration\": 10\n+            \"maxDuration\": 30\n         }\n     },\n     \"routes\": [\n         {\n+            \"src\": \"/favicon.ico\",\n+            \"dest\": \"/public/favicon.ico\"\n+        },\n+        {\n+            \"src\": \"/robots.txt\",\n+            \"dest\": \"/public/robots.txt\"\n+        },\n+        {\n             \"src\": \"/build/(.*)\",\n             \"dest\": \"/public/build/$1\"\n         },\n         {\n-            \"src\": \"/(css|js|images|storage)/(.*)\",\n+            \"src\": \"/(css|js|images|fonts|storage)/(.*)\",\n             \"dest\": \"/public/$1/$2\"\n         },\n         {\n             \"src\": \"/(.*)\",\n@@ -31,11 +39,16 @@\n         \"APP_PACKAGES_CACHE\": \"/tmp/packages.php\",\n         \"APP_ROUTES_CACHE\": \"/tmp/routes.php\",\n         \"APP_SERVICES_CACHE\": \"/tmp/services.php\",\n         \"VIEW_COMPILED_PATH\": \"/tmp/views\",\n+\n         \"CACHE_DRIVER\": \"array\",\n         \"LOG_CHANNEL\": \"stderr\",\n         \"SESSION_DRIVER\": \"cookie\",\n         \"SESSION_LIFETIME\": \"120\",\n-        \"SESSION_SECURE_COOKIE\": \"true\"\n+        \"SESSION_ENCRYPT\": \"false\",\n+        \"SESSION_SECURE_COOKIE\": \"true\",\n+        \"SESSION_SAME_SITE\": \"lax\",\n+\n+        \"FILESYSTEM_DISK\": \"local\"\n     }\n }\n"
                 }
             ],
             "date": 1766879415049,

@@ -1,15 +1,14 @@
 <?php
 
-require __DIR__.'/../vendor/autoload.php';
+// api/index.php
 
-$app = require_once __DIR__.'/../bootstrap/app.php';
+// Vercel serverless function entry point
+$_SERVER['SCRIPT_FILENAME'] = __DIR__.'/../public/index.php';
+$_SERVER['SCRIPT_NAME'] = '/index.php';
+$_SERVER['PHP_SELF'] = '/index.php';
 
-$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
+// Change to project root
+chdir(__DIR__.'/..');
 
-$response = $kernel->handle(
-    $request = Illuminate\Http\Request::capture()
-);
-
-$response->send();
-
-$kernel->terminate($request, $response);
+// Load public/index.php
+require __DIR__.'/../public/index.php';

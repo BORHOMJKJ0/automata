@@ -3,11 +3,15 @@
     "activeCommit": 0,
     "commits": [
         {
-            "activePatchIndex": 0,
+            "activePatchIndex": 1,
             "patches": [
                 {
                     "date": 1766956244706,
                     "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1766957118719,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,29 +1,40 @@\n <?php\n \n-// api/index.php - For Laravel 10 and below\n+/*\n+|--------------------------------------------------------------------------\n+| Create The Application\n+|--------------------------------------------------------------------------\n+*/\n \n-// Set correct paths for Vercel\n-$_SERVER['SCRIPT_FILENAME'] = __DIR__.'/../public/index.php';\n-$_SERVER['SCRIPT_NAME'] = '/index.php';\n-$_SERVER['PHP_SELF'] = '/index.php';\n-$_SERVER['DOCUMENT_ROOT'] = __DIR__.'/../public';\n+$app = new Illuminate\\Foundation\\Application(\n+    $_ENV['APP_BASE_PATH'] ?? dirname(__DIR__)\n+);\n \n-// Change to project root\n-chdir(__DIR__.'/..');\n+/*\n+|--------------------------------------------------------------------------\n+| Bind Important Interfaces\n+|--------------------------------------------------------------------------\n+*/\n \n-// Load composer autoload\n-require __DIR__.'/../vendor/autoload.php';\n+$app->singleton(\n+    Illuminate\\Contracts\\Http\\Kernel::class,\n+    App\\Http\\Kernel::class\n+);\n \n-// Bootstrap Laravel application\n-$app = require_once __DIR__.'/../bootstrap/app.php';\n+$app->singleton(\n+    Illuminate\\Contracts\\Console\\Kernel::class,\n+    App\\Console\\Kernel::class\n+);\n \n-// Create kernel and handle request\n-$kernel = $app->make(Illuminate\\Contracts\\Http\\Kernel::class);\n-\n-$response = $kernel->handle(\n-    $request = Illuminate\\Http\\Request::capture()\n+$app->singleton(\n+    Illuminate\\Contracts\\Debug\\ExceptionHandler::class,\n+    App\\Exceptions\\Handler::class\n );\n \n-$response->send();\n+/*\n+|--------------------------------------------------------------------------\n+| Return The Application\n+|--------------------------------------------------------------------------\n+*/\n \n-$kernel->terminate($request, $response);\n+return $app;\n"
                 }
             ],
             "date": 1766956244706,

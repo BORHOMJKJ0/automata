@@ -3,11 +3,15 @@
     "activeCommit": 0,
     "commits": [
         {
-            "activePatchIndex": 0,
+            "activePatchIndex": 1,
             "patches": [
                 {
                     "date": 1766879398099,
                     "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1766955075209,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,1 +1,11 @@\n+/node_modules\n /vendor\n+/storage/*.key\n+.env\n+.env.backup\n+.env.production\n+.phpunit.result.cache\n+Homestead.json\n+Homestead.yaml\n+npm-debug.log\n+yarn-error.log\n"
                 }
             ],
             "date": 1766879398099,

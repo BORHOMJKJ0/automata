@@ -3,11 +3,19 @@
     "activeCommit": 0,
     "commits": [
         {
-            "activePatchIndex": 0,
+            "activePatchIndex": 2,
             "patches": [
                 {
                     "date": 1766879386717,
                     "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1766955019722,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,3 +1,17 @@\n <?php\n \n-require __DIR__.'/../public/index.php';\n+// Load the Composer autoloader\n+require __DIR__ . '/../vendor/autoload.php';\n+\n+// Bootstrap Laravel and handle the request\n+$app = require_once __DIR__ . '/../bootstrap/app.php';\n+\n+$kernel = $app->make(Illuminate\\Contracts\\Http\\Kernel::class);\n+\n+$response = $kernel->handle(\n+    $request = Illuminate\\Http\\Request::capture()\n+);\n+\n+$response->send();\n+\n+$kernel->terminate($request, $response);\n\\ No newline at end of file\n"
+                },
+                {
+                    "date": 1766955025648,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,9 +1,8 @@\n <?php\n \n require __DIR__ . '/../vendor/autoload.php';\n \n-// Bootstrap Laravel and handle the request\n $app = require_once __DIR__ . '/../bootstrap/app.php';\n \n $kernel = $app->make(Illuminate\\Contracts\\Http\\Kernel::class);\n \n"
                 }
             ],
             "date": 1766879386716,
